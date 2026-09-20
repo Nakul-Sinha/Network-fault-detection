@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Agent runtime data (never commit local telemetry)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+netpulse-data/
+*.netpulse-bundle.zip
+api-token
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
