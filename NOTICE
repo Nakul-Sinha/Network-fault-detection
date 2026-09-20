@@ -1,0 +1,16 @@
+NetPulse Local
+Copyright 2026 Nakul Sinha
+
+This product includes software developed as the "Local Predictive Network
+Health Agent" described in Research.md and PRD.md in this repository.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this file except in compliance with the License. You may obtain a copy of
+the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+The agent performs active network probing against endpoints configured by the
+operator. Default probe targets are the local gateway, the resolvers the host
+is already configured to use, and a short allowlist of public HTTPS endpoints.
+See docs/privacy.md for the full data handling statement.
