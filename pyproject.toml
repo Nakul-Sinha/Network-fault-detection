@@ -7,7 +7,7 @@ name = "netpulse-local"
 version = "0.1.0"
 description = "Privacy-first local agent that predicts network degradation minutes ahead and explains the failing layer in plain language."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Nakul Sinha" }]
 keywords = ["networking", "anomaly-detection", "observability", "wifi", "dns", "privacy"]
@@ -20,7 +20,6 @@ classifiers = [
   "Operating System :: Microsoft :: Windows",
   "Operating System :: POSIX :: Linux",
   "Operating System :: MacOS :: MacOS X",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: System :: Networking :: Monitoring",
@@ -59,7 +58,7 @@ netpulse = ["api/static/*", "ml/weights/*.json", "py.typed"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 extend-exclude = ["build", "dist"]
 
 [tool.ruff.lint]
