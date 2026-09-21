@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>NetPulse Local</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="statusDot" aria-hidden="true"></span>
+    <h1>NetPulse Local</h1>
+  </div>
+  <div class="topbar-actions">
+    <span id="updated" class="muted" aria-live="polite">connecting</span>
+    <button id="pauseBtn" type="button" class="btn" aria-pressed="false">Pause probing</button>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="panel score-panel" aria-labelledby="scoreHeading">
+    <h2 id="scoreHeading" class="sr-only">Current health</h2>
+    <div class="score">
+      <div class="score-number"><span id="healthValue">--</span><span class="score-max">/100</span></div>
+      <div class="score-meta">
+        <span id="severityChip" class="chip">starting</span>
+        <span id="warmupChip" class="chip chip-quiet" hidden>learning your network</span>
+      </div>
+    </div>
+    <dl class="forecast">
+      <div>
+        <dt>Risk next 5 min</dt>
+        <dd><span id="risk5">--</span><div class="meter"><i id="risk5Bar"></i></div></dd>
+      </div>
+      <div>
+        <dt>Risk next 15 min</dt>
+        <dd><span id="risk15">--</span><div class="meter"><i id="risk15Bar"></i></div></dd>
+      </div>
+      <div>
+        <dt>Signals covered</dt>
+        <dd><span id="coverage">--</span></dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="panel" aria-labelledby="whatsUpHeading">
+    <h2 id="whatsUpHeading">What is going on</h2>
+    <div id="incidentCard" class="incident">
+      <p class="muted">Waiting for the first health reading.</p>
+    </div>
+    <div class="feedback">
+      <span id="feedbackPrompt">Was this right?</span>
+      <button type="button" class="btn btn-small" data-verdict="bad">It was bad</button>
+      <button type="button" class="btn btn-small" data-verdict="ok">It was fine</button>
+      <button type="button" class="btn btn-small" data-verdict="unsure">Not sure</button>
+      <span id="feedbackResult" class="muted" role="status"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="timelineHeading">
+    <div class="panel-head">
+      <h2 id="timelineHeading">Last 24 hours</h2>
+      <label class="range">
+        Window
+        <select id="rangeSelect">
+          <option value="1">1 hour</option>
+          <option value="6">6 hours</option>
+          <option value="24" selected>24 hours</option>
+          <option value="168">7 days</option>
+        </select>
+      </label>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 800 180" preserveAspectRatio="none" role="img"
+           aria-labelledby="chartDesc"></svg>
+      <p id="chartDesc" class="sr-only">Health score over the selected window, with incidents marked.</p>
+    </div>
+    <p id="chartSummary" class="muted"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="layersHeading">
+    <h2 id="layersHeading">Where the agent is looking</h2>
+    <ul id="layerList" class="layers"></ul>
+  </section>
+
+  <section class="panel" aria-labelledby="incidentsHeading">
+    <h2 id="incidentsHeading">Recent incidents</h2>
+    <ul id="incidentList" class="incidents"><li class="muted">None yet.</li></ul>
+  </section>
+
+  <section class="panel" aria-labelledby="probesHeading">
+    <div class="panel-head">
+      <h2 id="probesHeading">Probe log</h2>
+      <button id="probesToggle" type="button" class="btn btn-small" aria-expanded="false"
+              aria-controls="probeTableWrap">Show</button>
+    </div>
+    <p class="muted">Every packet this agent sends is listed here, with where it went.</p>
+    <div id="probeTableWrap" hidden>
+      <table class="probes">
+        <thead><tr><th scope="col">Time</th><th scope="col">Collector</th>
+          <th scope="col">Target</th><th scope="col">Result</th><th scope="col">ms</th></tr></thead>
+        <tbody id="probeBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="privacyHeading">
+    <h2 id="privacyHeading">Privacy centre</h2>
+    <p>Everything measured stays on this machine. No packet contents are ever captured,
+       and nothing is uploaded.</p>
+    <ul id="privacyFacts" class="facts"></ul>
+    <div class="actions">
+      <button id="exportBtn" type="button" class="btn">Export diagnostic bundle</button>
+      <button id="learningBtn" type="button" class="btn" aria-pressed="false">Pause learning</button>
+      <button id="wipeBtn" type="button" class="btn btn-danger">Delete all stored data</button>
+    </div>
+    <p id="privacyResult" class="muted" role="status"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="capHeading">
+    <div class="panel-head">
+      <h2 id="capHeading">What this machine can measure</h2>
+      <button id="capToggle" type="button" class="btn btn-small" aria-expanded="false"
+              aria-controls="capList">Show</button>
+    </div>
+    <ul id="capList" class="caps" hidden></ul>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span id="versionLabel">NetPulse Local</span>
+  <span class="muted">Predictions are estimates. Never treat a layer attribution as proof.</span>
+</footer>
+
+<script>window.NETPULSE_TOKEN = "__NETPULSE_TOKEN__";</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -170,9 +170,11 @@ class WorkerSupervisor:
         self.stop_event = threading.Event()
         self.workers: dict[str, CollectorWorker] = {}
         self._restarts: dict[str, int] = {}
+        self.started = False
 
     def start(self) -> None:
         self.stop_event.clear()
+        self.started = True
         for collector in self.collectors:
             self._spawn(collector)
 
@@ -185,7 +187,9 @@ class WorkerSupervisor:
     def check(self) -> list[str]:
         """Restart dead workers. Returns the names that were restarted."""
         restarted: list[str] = []
-        if self.stop_event.is_set():
+        if not self.started or self.stop_event.is_set():
+            # Maintenance can run before start() in one-shot modes such as
+            # `netpulse check`; it must not conjure workers nobody asked for.
             return restarted
         for collector in self.collectors:
             worker = self.workers.get(collector.name)
@@ -200,6 +204,7 @@ class WorkerSupervisor:
         return restarted
 
     def stop(self, timeout: float = 10.0) -> None:
+        self.started = False
         self.stop_event.set()
         deadline = time.monotonic() + timeout
         for worker in self.workers.values():
