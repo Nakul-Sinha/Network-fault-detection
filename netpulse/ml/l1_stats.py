@@ -51,6 +51,15 @@ DEADBAND_Z = 1.5
 #: sensitivity.
 RELATIVE_SPREAD_FLOOR = 0.25
 
+#: Extra tolerance while the hour-of-day bucket for the current hour is still
+#: cold. The first evening after an install has no seasonal history to
+#: compare against, so the ordinary peak-hour rise looks like an anomaly and
+#: the agent raises an incident on a network where nothing is wrong. Widening
+#: the spread says what is actually true, that this hour is not yet known,
+#: and it costs nothing in sensitivity because a real fault moves these
+#: features by multiples rather than by a third.
+COLD_HOUR_SPREAD_MULTIPLIER = 2.5
+
 #: Smoothing applied to each feature's contribution. Degradation that matters
 #: persists across samples; sampling noise does not. Roughly a four sample
 #: memory.
@@ -135,15 +144,23 @@ class FeatureBaseline:
             return bucket
         return self.global_moments
 
+    def hour_is_known(self, hour: int) -> bool:
+        return self.hourly[hour % HOURS].count >= BUCKET_WARM
+
     def spread(self, hour: int) -> float:
         """Standard deviation with a floor proportional to the mean.
 
         A feature that has been perfectly flat (a LAN RTT pinned at 1 ms) has
         zero variance, and without a floor any wobble would read as an
-        enormous anomaly.
+        enormous anomaly. An hour this install has not seen before gets a
+        wider floor still, because there is no seasonal baseline for it yet.
         """
         reference = self.reference(hour)
-        return max(reference.std, abs(reference.mean) * RELATIVE_SPREAD_FLOOR, 1e-6)
+        floor = abs(reference.mean) * RELATIVE_SPREAD_FLOOR
+        spread = max(reference.std, floor, 1e-6)
+        if not self.hour_is_known(hour):
+            spread *= COLD_HOUR_SPREAD_MULTIPLIER
+        return spread
 
     def score(self, value: float, hour: int) -> float:
         """Signed z-score, oriented so positive always means worse."""

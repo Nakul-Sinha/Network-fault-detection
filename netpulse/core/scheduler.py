@@ -57,6 +57,7 @@ class WorkerStats:
     failures: int = 0
     skips: int = 0
     restarts: int = 0
+    triggered: int = 0
     last_run: float | None = None
     last_duration_ms: float = 0.0
     next_due: float = field(default_factory=time.time)
@@ -82,6 +83,10 @@ class CollectorWorker(threading.Thread):
         self.stats = WorkerStats()
         self._rng = rng or random.Random()
         self._consecutive_failures = 0
+        #: Set to run this collector immediately rather than at its next due
+        #: time. PRD 6.3 allows the expensive probes to run "on suspicion",
+        #: which is what this is for.
+        self.wake = threading.Event()
 
     def interval(self) -> float:
         base = self.collector.interval_s()
@@ -108,6 +113,7 @@ class CollectorWorker(threading.Thread):
             return
 
         while not self.stop_event.is_set():
+            self.wake.clear()
             started = time.perf_counter()
             try:
                 result = self.collector.collect()
@@ -136,8 +142,18 @@ class CollectorWorker(threading.Thread):
 
             wait = self.interval()
             self.stats.next_due = time.time() + wait
-            if self.stop_event.wait(wait):
-                return
+            # Wake early either to stop, or because something asked for this
+            # probe now. Waiting on both keeps shutdown immediate.
+            deadline = time.monotonic() + wait
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                if self.stop_event.wait(min(remaining, 0.5)):
+                    return
+                if self.wake.is_set():
+                    self.stats.triggered += 1
+                    break
 
     def status(self) -> dict[str, object]:
         return {
@@ -147,6 +163,7 @@ class CollectorWorker(threading.Thread):
             "failures": self.stats.failures,
             "skips": self.stats.skips,
             "restarts": self.stats.restarts,
+            "triggered": self.stats.triggered,
             "last_run": self.stats.last_run,
             "last_duration_ms": round(self.stats.last_duration_ms, 1),
             "next_due": self.stats.next_due,
@@ -202,6 +219,20 @@ class WorkerSupervisor:
             self._spawn(collector)
             restarted.append(collector.name)
         return restarted
+
+    def trigger(self, *names: str) -> list[str]:
+        """Ask the named collectors to run now instead of at their next due time.
+
+        The probe budget still applies, so this cannot be used to exceed the
+        rate limits; it only moves an allowed probe earlier.
+        """
+        woken: list[str] = []
+        for name in names:
+            worker = self.workers.get(name)
+            if worker is not None and worker.is_alive():
+                worker.wake.set()
+                woken.append(name)
+        return woken
 
     def stop(self, timeout: float = 10.0) -> None:
         self.started = False
