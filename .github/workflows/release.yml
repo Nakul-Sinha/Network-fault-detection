@@ -4,10 +4,6 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to build (for a dry run)"
-        required: false
 
 permissions:
   contents: write
@@ -16,9 +12,18 @@ permissions:
 env:
   PYTHONUNBUFFERED: "1"
 
+# Each job uploads its own assets straight to the release rather than handing
+# them to a final job through the artifact store. The round trip was the only
+# part of this pipeline that ever failed, twice, on "artifact download failed
+# after 5 retries", with every build having succeeded. A job that has the file
+# on disk should attach it there and then.
+#
+# The release is created as a draft first and published at the end, so nobody
+# sees a half-populated release while the matrix is still running.
+
 jobs:
   gate:
-    name: Evaluation gate
+    name: Tests and PRD targets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,10 +41,33 @@ jobs:
         # go out, whatever the version number says.
         run: python -m netpulse eval --gate
 
+  draft:
+    name: Create the draft release
+    runs-on: ubuntu-latest
+    needs: [gate]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create or reuse the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists, reusing it"
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --draft \
+            --title "NetPulse Local $TAG" \
+            --generate-notes \
+            --notes-file .github/release-notes.md
+
   distribution:
     name: sdist and wheel
     runs-on: ubuntu-latest
-    needs: [gate]
+    needs: [draft]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,18 +80,18 @@ jobs:
       - name: Software bill of materials
         # PRD 14.3 packaging checklist.
         run: |
-          python -m pip install -e .
-          cyclonedx-py environment --output-format json --outfile dist/sbom.json || \
-            echo "SBOM generation skipped"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: distribution
-          path: dist/*
+          python -m pip install .
+          cyclonedx-py environment --output-format json --outfile dist/sbom.json \
+            || echo "SBOM generation skipped"
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" dist/* --clobber
 
   binaries:
     name: Binary for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: [gate]
+    needs: [draft]
     strategy:
       fail-fast: false
       matrix:
@@ -86,11 +114,14 @@ jobs:
       - name: Build
         run: pyinstaller packaging/pyinstaller/netpulse.spec --clean --noconfirm
       - name: Smoke test the binary
+        # The binary once built cleanly and died on first run, so running it
+        # here is the point of this step, not a formality.
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then BIN=dist/netpulse.exe; else BIN=dist/netpulse; fi
           "$BIN" version
           "$BIN" doctor
+          "$BIN" demo --list
           "$BIN" check --json
       - name: Rename
         shell: bash
@@ -100,10 +131,11 @@ jobs:
           else
             mv dist/netpulse "dist/${{ matrix.asset }}"
           fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset }}
-          path: dist/${{ matrix.asset }}
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "dist/${{ matrix.asset }}" --clobber
 
   container:
     name: Container image
@@ -111,6 +143,7 @@ jobs:
     needs: [gate]
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -136,43 +169,21 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
   publish:
-    name: Publish the release
+    name: Checksums and publish
     runs-on: ubuntu-latest
     needs: [distribution, binaries, container]
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      - name: Collect
+      - name: Checksum every asset and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          mkdir -p release
-          find artifacts -type f -exec cp {} release/ \;
-          ls -la release
-      - name: Checksums
-        run: |
-          cd release
+          mkdir -p assets && cd assets
+          gh release download "$TAG" --clobber
+          ls -la
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: release/*
-          generate_release_notes: true
-          body: |
-            NetPulse Local predicts network trouble minutes ahead and explains
-            which layer is failing, running entirely on your own machine.
-
-            **Install**
-
-                pip install netpulse-local
-                netpulse doctor     # what can this machine measure
-                netpulse run        # agent plus the local web UI
-
-            Standalone binaries below need no Python. The container image is
-            at `ghcr.io/${{ github.repository }}`.
-
-            Verify a download against `SHA256SUMS` before running it.
-
-            Nothing in this release sends network data anywhere. See
-            `docs/privacy.md` for exactly what is stored and where.
+          gh release upload "$TAG" SHA256SUMS --clobber
+          gh release edit "$TAG" --draft=false
+          echo "published $TAG"
