@@ -119,15 +119,24 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: |
-          python -m pip install --upgrade pip pip-audit
-          # A regular install rather than an editable one: pip-audit cannot
-          # resolve an editable distribution against PyPI, and the runtime
-          # dependencies are what this job is auditing.
-          python -m pip install .
-      - name: Audit installed dependencies
+      - run: python -m pip install --upgrade pip pip-audit
+      - name: Extract the declared runtime dependencies
+        # Auditing the environment means auditing this project too, and it
+        # has no PyPI entry to resolve, which --strict treats as an error.
+        # What the job is actually for is the dependency tree that ships to
+        # users, so it is audited directly from the project metadata.
+        run: |
+          python - <<'PY' > requirements-runtime.txt
+          import tomllib
+          with open("pyproject.toml", "rb") as handle:
+              data = tomllib.load(handle)
+          print("
+".join(data["project"]["dependencies"]))
+          PY
+          cat requirements-runtime.txt
+      - name: Audit
         # PRD 12.2 asks for dependency scanning in CI.
-        run: pip-audit --strict --skip-editable --progress-spinner off
+        run: pip-audit --strict --requirement requirements-runtime.txt --progress-spinner off
 
   build:
     name: Build distribution

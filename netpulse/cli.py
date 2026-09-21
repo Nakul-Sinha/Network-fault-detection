@@ -535,60 +535,85 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log-level", default="INFO", help="console log level (DEBUG, INFO, WARNING)"
     )
+
+    # The same three flags are accepted after the subcommand as well, because
+    # `netpulse check --json` is what people actually type and being told it
+    # is an unrecognised argument is a poor answer. SUPPRESS is what makes
+    # both positions work: without it the subparser would write its own
+    # default back over a value given before the subcommand.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    common.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help="machine-readable output"
+    )
+    common.add_argument("--log-level", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run = subparsers.add_parser("run", help="run the agent and the local web UI")
+    run = subparsers.add_parser("run", help="run the agent and the local web UI", parents=[common])
     run.add_argument("--headless", action="store_true", help="server mode, no browser prompt")
     run.add_argument("--no-api", action="store_true", help="do not serve the web UI")
     run.set_defaults(func=cmd_run)
 
-    status = subparsers.add_parser("status", help="show the current health reading")
+    status = subparsers.add_parser(
+        "status", help="show the current health reading", parents=[common]
+    )
     status.set_defaults(func=cmd_status)
 
     check = subparsers.add_parser(
-        "check", help="run one collection round and print the result, then exit"
+        "check", help="run one collection round and print the result, then exit", parents=[common]
     )
     check.set_defaults(func=cmd_check)
 
-    doctor = subparsers.add_parser("doctor", help="report what this machine can measure")
+    doctor = subparsers.add_parser(
+        "doctor", help="report what this machine can measure", parents=[common]
+    )
     doctor.set_defaults(func=cmd_doctor)
 
-    pause = subparsers.add_parser("pause", help="stop sending probes")
+    pause = subparsers.add_parser("pause", help="stop sending probes", parents=[common])
     pause.set_defaults(func=cmd_pause)
 
-    resume = subparsers.add_parser("resume", help="start sending probes again")
+    resume = subparsers.add_parser("resume", help="start sending probes again", parents=[common])
     resume.set_defaults(func=cmd_resume)
 
-    learning = subparsers.add_parser("learning", help="pause or resume model learning")
+    learning = subparsers.add_parser(
+        "learning", help="pause or resume model learning", parents=[common]
+    )
     learning.add_argument("state", choices=("on", "off"))
     learning.set_defaults(func=cmd_learning)
 
-    label = subparsers.add_parser("label", help="tell the agent whether it was right")
+    label = subparsers.add_parser(
+        "label", help="tell the agent whether it was right", parents=[common]
+    )
     label.add_argument("verdict", choices=("bad", "ok", "unsure"))
     label.add_argument("note", nargs="?", default="", help="optional note")
     label.add_argument("--minutes", type=float, default=15.0, help="window this covers")
     label.set_defaults(func=cmd_label)
 
-    incidents = subparsers.add_parser("incidents", help="list recent incidents")
+    incidents = subparsers.add_parser("incidents", help="list recent incidents", parents=[common])
     incidents.add_argument("--limit", type=int, default=20)
     incidents.set_defaults(func=cmd_incidents)
 
-    export = subparsers.add_parser("export", help="write a redacted diagnostic bundle")
+    export = subparsers.add_parser(
+        "export", help="write a redacted diagnostic bundle", parents=[common]
+    )
     export.add_argument("--output", "-o", help="where to write the zip")
     export.add_argument("--hours", type=float, default=24.0)
     export.add_argument("--no-logs", action="store_true", help="leave agent logs out")
     export.set_defaults(func=cmd_export)
 
-    wipe = subparsers.add_parser("wipe", help="delete every stored observation")
+    wipe = subparsers.add_parser("wipe", help="delete every stored observation", parents=[common])
     wipe.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     wipe.set_defaults(func=cmd_wipe)
 
-    config_cmd = subparsers.add_parser("config", help="show or create the configuration")
+    config_cmd = subparsers.add_parser(
+        "config", help="show or create the configuration", parents=[common]
+    )
     config_cmd.add_argument("--init", action="store_true", help="write a starter config file")
     config_cmd.set_defaults(func=cmd_config)
 
     evaluate = subparsers.add_parser(
-        "eval", help="replay the fault-injection corpus and report the metrics"
+        "eval", help="replay the fault-injection corpus and report the metrics", parents=[common]
     )
     evaluate.add_argument("--gate", action="store_true", help="exit non-zero if a target regressed")
     evaluate.add_argument("--seeds", type=int, nargs="+", default=[11])
@@ -596,16 +621,18 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--soak-hours", type=float, default=8.0)
     evaluate.set_defaults(func=cmd_eval)
 
-    replay = subparsers.add_parser("replay", help="replay a captured samples.jsonl")
+    replay = subparsers.add_parser(
+        "replay", help="replay a captured samples.jsonl", parents=[common]
+    )
     replay.add_argument("path")
     replay.set_defaults(func=cmd_replay)
 
-    train = subparsers.add_parser("train", help="retrain the predictive head")
+    train = subparsers.add_parser("train", help="retrain the predictive head", parents=[common])
     train.add_argument("--output", "-o", help="where to write the model bundle")
     train.add_argument("--epochs", type=int, default=600)
     train.set_defaults(func=cmd_train)
 
-    version = subparsers.add_parser("version", help="print the version")
+    version = subparsers.add_parser("version", help="print the version", parents=[common])
     version.set_defaults(func=cmd_version)
 
     return parser

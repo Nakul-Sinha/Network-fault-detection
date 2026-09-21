@@ -575,6 +575,20 @@ def test_cli_doctor_json(capsys):
     assert len(payload["collectors"]) == 7
 
 
+@pytest.mark.parametrize("argv", [["--json", "version"], ["version", "--json"]])
+def test_global_flags_work_on_either_side_of_the_subcommand(capsys, argv):
+    """`netpulse check --json` is what people type; it has to work."""
+    assert main(argv) == 0
+    assert json.loads(capsys.readouterr().out)["version"]
+
+
+def test_config_flag_after_the_subcommand(capsys, tmp_path):
+    path = tmp_path / "custom.toml"
+    path.write_text("[api]" + chr(10) + "port = 9321" + chr(10), encoding="utf-8")
+    assert main(["config", "--config", str(path), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["api"]["port"] == 9321
+
+
 def test_cli_config_init_then_show(capsys):
     assert main(["config", "--init"]) == 0
     assert paths.config_file().exists()
