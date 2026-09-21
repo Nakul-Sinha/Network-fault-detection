@@ -409,6 +409,48 @@ def generate(
     )
 
 
+def generate_soak(
+    *,
+    hours: float = 8.0,
+    seed: int = 5,
+    start_hour: float = 14.0,
+    start_ts: float = 1_780_000_000.0,
+) -> ScenarioRun:
+    """A long, entirely healthy run for measuring the false-alarm rate.
+
+    PRD 3.2 caps default noisy alerts at two per day. That number cannot be
+    estimated honestly from a seventy-five minute scenario: one spurious
+    alert in that window extrapolates to nineteen a day and one fewer
+    extrapolates to zero. So the alert-rate gate runs against hours of quiet
+    traffic that crosses the evening congestion peak, where a naive detector
+    fires.
+    """
+    rng = random.Random(seed)
+    total = int(hours * 3600)
+    samples: list[Sample] = []
+    last_emitted: dict[str, float] = {}
+    for offset in range(0, total + 1, BASE_CADENCE_S):
+        ts = start_ts + offset
+        values = _healthy(start_hour + offset / 3600.0, rng)
+        sample = Sample(ts=ts)
+        for name, value in values.items():
+            previous = last_emitted.get(name)
+            if previous is not None and ts - previous < cadence_for(name):
+                continue
+            last_emitted[name] = ts
+            sample.set(name, value)
+        if sample.values:
+            samples.append(sample)
+    return ScenarioRun(
+        name=f"soak_{hours:g}h",
+        samples=samples,
+        bad_windows=[],
+        expected_layer=None,
+        description=f"{hours:g} hours of healthy traffic across the evening peak.",
+        start_ts=start_ts,
+    )
+
+
 def generate_corpus(
     *, seeds: tuple[int, ...] = (11, 23, 37), names: tuple[str, ...] | None = None
 ) -> list[ScenarioRun]:
