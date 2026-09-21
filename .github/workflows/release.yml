@@ -78,11 +78,15 @@ jobs:
           python -m pip install --upgrade pip build cyclonedx-bom
           python -m build
       - name: Software bill of materials
-        # PRD 14.3 packaging checklist.
+        # PRD 14.3 packaging checklist. There is no `|| true` here on
+        # purpose: the first version of this step passed a flag that does not
+        # exist and swallowed the error, so v0.1.0 shipped without an SBOM
+        # and nothing said so. A step allowed to fail silently is a step that
+        # is not running.
         run: |
           python -m pip install .
-          cyclonedx-py environment --output-format json --outfile dist/sbom.json \
-            || echo "SBOM generation skipped"
+          cyclonedx-py environment --output-format JSON --output-file dist/sbom.json
+          python scripts/check_sbom.py dist/sbom.json
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
