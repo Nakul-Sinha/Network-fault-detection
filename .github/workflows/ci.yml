@@ -102,6 +102,18 @@ jobs:
         # alarm budget. A model change that quietly trades one of these for
         # another fails here rather than in someone's evening call.
         run: python -m netpulse eval --gate
+      - name: The demo recordings match the current model
+        # ADR 0003 makes the project site a replay of the real scorer rather
+        # than a mock, which is only true while the recordings are current.
+        # Regenerating and diffing is the cheapest way to keep that honest.
+        run: |
+          python scripts/build_demo_data.py
+          if ! git diff --quiet -- web/public/data; then
+            echo "::error::web/public/data is stale. Run scripts/build_demo_data.py and commit."
+            git --no-pager diff --stat -- web/public/data
+            exit 1
+          fi
+          echo "recordings are in step with the model"
       - name: Publish the report
         if: always()
         run: python -m netpulse --json eval > eval-report.json
