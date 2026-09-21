@@ -39,6 +39,7 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.13",
   "build>=1.2",
+  "pyyaml>=6.0",  # workflow validation in scripts/check_workflows.py
 ]
 package = ["pyinstaller>=6.6"]
 
