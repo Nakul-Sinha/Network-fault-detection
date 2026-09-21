@@ -285,7 +285,7 @@ def percentile(values: list[float], fraction: float) -> float:
         return 0.0
     ordered = sorted(values)
     position = fraction * (len(ordered) - 1)
-    low = int(math.floor(position))
+    low = math.floor(position)
     high = min(low + 1, len(ordered) - 1)
     weight = position - low
     return ordered[low] * (1 - weight) + ordered[high] * weight

@@ -62,7 +62,7 @@ def population_stability_index(
     edges: list[float] = []
     for index in range(1, bins):
         position = index * (len(ordered) - 1) / bins
-        low = int(math.floor(position))
+        low = math.floor(position)
         high = min(low + 1, len(ordered) - 1)
         fraction = position - low
         edges.append(ordered[low] * (1 - fraction) + ordered[high] * fraction)
