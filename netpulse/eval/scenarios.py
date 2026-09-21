@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import random
+import zlib
 from dataclasses import dataclass, field
 
 from ..store.models import Sample
@@ -40,6 +41,18 @@ CADENCE_S: tuple[tuple[str, int], ...] = (
     ("captive_", 300),
     ("path_", 600),
 )
+
+
+def stable_seed(name: str) -> int:
+    """A seed that is the same in every process.
+
+    The obvious ``hash(name)`` is not: Python randomises string hashing per
+    interpreter unless PYTHONHASHSEED is pinned, so a corpus seeded that way
+    generates different data on every run. That makes evaluation results
+    irreproducible and tests intermittently red, which is worse than having
+    no fixtures at all.
+    """
+    return zlib.crc32(name.encode("utf-8")) & 0xFFFF
 
 
 def cadence_for(feature: str) -> int:
@@ -349,7 +362,7 @@ def generate(
     """
     if isinstance(spec, str):
         spec = SCENARIOS_BY_NAME[spec]
-    rng = random.Random(seed if seed else hash(spec.name) & 0xFFFF)
+    rng = random.Random(seed if seed else stable_seed(spec.name))
 
     precursor_start = warmup_s
     impact_start = warmup_s + spec.precursor_s

@@ -31,9 +31,12 @@ log = get_logger(__name__)
 #: has no need to react in thirty seconds, and the shorter window let isolated
 #: noise spikes open incidents on a perfectly healthy network.
 OPEN_AFTER = 6
-#: Consecutive quiet frames before an incident closes. Deliberately larger
-#: than OPEN_AFTER so a flapping network produces one incident, not twenty.
-CLOSE_AFTER = 8
+#: Consecutive quiet frames before an incident closes: five minutes at the
+#: default cadence, matching the short forecast horizon. Deliberately much
+#: larger than OPEN_AFTER, because an episode that is still building counts
+#: as the same episode. At two minutes, the precursor of a gateway failure
+#: and the failure itself were reported as two separate incidents.
+CLOSE_AFTER = 20
 #: Health is smoothed so the number a user is watching does not flicker.
 HEALTH_BETA = 0.4
 #: Risk is smoothed for the same reason and a stronger one: a probability of
