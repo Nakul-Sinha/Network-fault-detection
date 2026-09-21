@@ -132,7 +132,11 @@ def evaluate(frame: FeatureFrame) -> list[RuleHit]:
         )
 
     https_fail = values.get("https_fail_rate")
-    if https_fail is not None and https_fail >= 0.99 and (loss is None or loss < 0.5):
+    # Failing HTTPS only implicates the far end when the two things it
+    # depends on, the router and name resolution, are both healthy.
+    # Otherwise the failure is a symptom of those and not a cause.
+    local_healthy = (loss is None or loss < 0.5) and (dns_fail is None or dns_fail < 0.2)
+    if https_fail is not None and https_fail >= 0.99 and local_healthy:
         hits.append(
             RuleHit(
                 rule_id="l0.remote_unreachable",
@@ -186,12 +190,20 @@ def evaluate(frame: FeatureFrame) -> list[RuleHit]:
 
     retrans = values.get("os_retrans_rate")
     if retrans is not None and retrans >= 0.08:
+        # Retransmissions are measured on the host, but when a tunnel is
+        # carrying the traffic they are far more likely to be the tunnel
+        # than the network adapter, so the rule follows the route.
+        on_vpn = values.get("vpn_active", 0.0) >= 1.0
         hits.append(
             RuleHit(
                 rule_id="l0.tcp_retransmissions",
-                layer="os",
+                layer="vpn" if on_vpn else "os",
                 severity="watch",
-                message="This device is retransmitting an unusual share of TCP segments.",
+                message=(
+                    "Traffic inside the VPN tunnel is being retransmitted heavily."
+                    if on_vpn
+                    else "This device is retransmitting an unusual share of TCP segments."
+                ),
                 evidence=[_evidence("TCP retransmissions", retrans * 100, "%", "above 8%")],
             )
         )
