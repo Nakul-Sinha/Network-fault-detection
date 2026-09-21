@@ -134,6 +134,10 @@ make gate     # same, but fail if a PRD target regressed
 `make gate` is what CI blocks merges on. A change that quietly trades lead
 time for precision fails there rather than in someone's evening call.
 
+[CONTRIBUTING.md](CONTRIBUTING.md) covers adding a collector, a template or
+an evaluation scenario. [SECURITY.md](SECURITY.md) covers what is in scope
+and what the project already does.
+
 The fault-injection corpus in `netpulse/eval/scenarios.py` is the portable
 half of the lab from PRD 13.1. Every fault has a precursor phase before its
 impact phase, because a corpus where degradation appears instantly cannot
