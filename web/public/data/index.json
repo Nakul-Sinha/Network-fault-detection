@@ -144,8 +144,11 @@
  "generatedFrom": "netpulse.ml.scorer.Scorer over netpulse.eval.scenarios",
  "stats": {
   "faults": 12,
-  "detected": 12,
-  "medianLeadSeconds": 480,
-  "benignAlerts": 0
+  "detectionRate": 1.0,
+  "medianLeadSeconds": 375.0,
+  "layerAccuracy": 1.0,
+  "precision": 1.0,
+  "benignAlertsPerDay": 0.0,
+  "source": "netpulse eval, the same figures CI gates on"
  }
 }

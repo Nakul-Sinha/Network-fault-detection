@@ -74,8 +74,15 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         state.index = data;
-        if (data.stats && data.stats.medianLeadSeconds) {
-          text("statLead", minutes(data.stats.medianLeadSeconds));
+        // Every headline figure comes from the recordings index, which takes
+        // them from the evaluation harness. Hard-coding them in the markup
+        // would let the page drift away from what the gate actually enforces.
+        var s = data.stats || {};
+        if (s.medianLeadSeconds) text("statLead", minutes(s.medianLeadSeconds));
+        if (s.detectionRate !== undefined) text("statDetect", Math.round(s.detectionRate * 100) + "%");
+        if (s.layerAccuracy !== undefined) text("statLayer", Math.round(s.layerAccuracy * 100) + "%");
+        if (s.benignAlertsPerDay !== undefined) {
+          text("statBenign", s.benignAlertsPerDay === 0 ? "0" : s.benignAlertsPerDay.toFixed(1));
         }
         buildPicker(data.scenarios);
         var first = data.scenarios.filter(function (s) { return !s.benign; })[0];
