@@ -51,6 +51,7 @@ check it against `SHA256SUMS`, and run it.
 # Linux and macOS
 chmod +x netpulse-linux-x86_64
 ./netpulse-linux-x86_64 doctor
+./netpulse-linux-x86_64 demo      # replay a fault, no install needed
 ```
 
 ```powershell
