@@ -146,6 +146,7 @@
   "faults": 12,
   "detectionRate": 1.0,
   "medianLeadSeconds": 375.0,
+  "medianLeadLabel": "6.2 min",
   "layerAccuracy": 1.0,
   "precision": 1.0,
   "benignAlertsPerDay": 0.0,
