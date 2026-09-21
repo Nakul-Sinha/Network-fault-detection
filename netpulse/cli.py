@@ -27,7 +27,7 @@ from typing import Any
 
 from . import __version__, paths
 from .config import NetPulseConfig, load_config, write_default_config
-from .logging_setup import setup_logging
+from .logging_setup import set_level, setup_logging
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -511,6 +511,106 @@ def cmd_train(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    """Replay a recorded fault against a live agent and its web UI.
+
+    Waiting for a real network to break is a poor way to find out whether
+    this works. The collectors are switched off and their measurements come
+    from the corpus; everything downstream of that is the product.
+    """
+    import os
+    import tempfile
+
+    from .eval.demo import DemoDriver, demo_config, resolve_scenario, scenario_names
+
+    if args.list:
+        print("Scenarios you can replay:")
+        for name in scenario_names():
+            print(f"  {name}")
+        return EXIT_OK
+
+    # A scratch home by default, so a demo never mixes recorded faults into
+    # the real history of the machine it runs on.
+    if not args.keep:
+        os.environ["NETPULSE_HOME"] = tempfile.mkdtemp(prefix="netpulse-demo-")
+
+    try:
+        run = resolve_scenario(args.scenario)
+    except ValueError as exc:
+        print(f"netpulse: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    from .api.server import serve, ui_url
+    from .core.agent import Agent
+
+    config = demo_config(load_config(args.config))
+    agent = Agent(config)
+    serve_ui = config.api.enabled and not args.no_api
+    # The demo narrates itself; agent log lines would interleave with the
+    # progress line and duplicate the incident card.
+    set_level("WARNING")
+    interactive = sys.stdout.isatty()
+
+    print(f"NetPulse Local {__version__}   demo: {run.name}")
+    print(f"  {run.description}")
+    print(
+        f"  {len(run.samples)} samples, {len(run.samples) * 15 / 60:.0f} minutes "
+        f"of recording at {args.speed:g}x"
+    )
+    if serve_ui:
+        print(f"  web UI    {ui_url(config)}")
+    print("  collectors are off; every measurement below comes from the recording")
+    print("  press Ctrl+C to stop")
+    print()
+
+    def on_frame(index: int, result: Any) -> None:
+        score = result.score
+        if result.opened is not None:
+            stamp = time.strftime("%H:%M:%S", time.localtime())
+            print()
+            print(f"  [{stamp}] {score.severity.upper()}  {result.opened.title}")
+            print(f"             {result.opened.summary}")
+            for item in result.opened.remediation[:2]:
+                print(f"             - {item}")
+            if run.impact_start is not None:
+                lead = (run.impact_start - run.samples[index].ts) / 60.0
+                if lead > 0:
+                    print(f"             that is {lead:.1f} minutes before it actually breaks")
+            print()
+        elif index % (6 if interactive else 40) == 0:
+            line = (
+                f"  health {score.health:5.1f} {_sparkbar(score.health)}  "
+                f"risk 15m {score.risk_15m * 100:3.0f}%   {score.severity:<9}"
+            )
+            # A carriage return repaints one line in a terminal and produces
+            # an unreadable smear once the output is piped or captured.
+            sys.stdout.write(("\r" + line) if interactive else (line + "\n"))
+            sys.stdout.flush()
+
+    driver = DemoDriver(agent, run, speed=args.speed, loop=args.loop, on_frame=on_frame)
+
+    try:
+        driver.start()
+        if serve_ui:
+            serve(agent, config)
+        else:
+            driver.wait()
+            print()
+    except KeyboardInterrupt:
+        print()
+        print("stopping")
+    finally:
+        driver.stop()
+        agent.stop()
+        agent.db.close()
+    return EXIT_OK
+
+
+def _sparkbar(health: float, width: int = 22) -> str:
+    filled = int(max(0.0, min(100.0, health)) / 100 * width)
+    return "[" + "#" * filled + "." * (width - filled) + "]"
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     if args.json:
         _print({"version": __version__, "python": sys.version.split()[0]}, True)
@@ -631,6 +731,25 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--output", "-o", help="where to write the model bundle")
     train.add_argument("--epochs", type=int, default=600)
     train.set_defaults(func=cmd_train)
+
+    demo = subparsers.add_parser(
+        "demo",
+        help="replay a recorded fault against a live agent and the web UI",
+        parents=[common],
+    )
+    demo.add_argument(
+        "scenario", nargs="?", default=None, help="which fault to replay (default: wifi_fade)"
+    )
+    demo.add_argument("--speed", type=float, default=30.0, help="playback speed, default 30x")
+    demo.add_argument("--loop", action="store_true", help="replay continuously")
+    demo.add_argument("--no-api", action="store_true", help="terminal only, no web UI")
+    demo.add_argument("--list", action="store_true", help="list the scenarios and exit")
+    demo.add_argument(
+        "--keep",
+        action="store_true",
+        help="use the real data directory instead of a scratch one",
+    )
+    demo.set_defaults(func=cmd_demo)
 
     version = subparsers.add_parser("version", help="print the version", parents=[common])
     version.set_defaults(func=cmd_version)
