@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from netpulse.config import NetPulseConfig  # noqa: E402
+from netpulse.eval.replay import replay_corpus  # noqa: E402
 from netpulse.eval.scenarios import SCENARIOS, ScenarioRun, generate  # noqa: E402
 from netpulse.ml import l0_rules  # noqa: E402
 from netpulse.ml.scorer import Scorer  # noqa: E402
@@ -275,22 +276,37 @@ def main() -> int:
             }
         )
 
-    detected = [item for item in index if not item["benign"] and item["leadSeconds"] is not None]
-    leads = sorted(item["leadSeconds"] for item in detected)
+    # The headline figures come from the evaluation harness, not from these
+    # recordings. The recordings are anchored to a fixed hour so they are
+    # byte-reproducible, and each marks its own first warning, which is right
+    # for the per-scenario timeline but yields a slightly different median
+    # from the one CI gates on. Publishing a number nobody enforces is
+    # publishing a number nobody should believe.
+    print("\n  running the evaluation harness for the headline figures ...")
+    report = replay_corpus(seeds=(11,), include_soak=True, soak_hours=8.0)
+    official = report.summary()
+
     summary = {
         "scenarios": index,
         "generatedFrom": "netpulse.ml.scorer.Scorer over netpulse.eval.scenarios",
         "stats": {
-            "faults": len([item for item in index if not item["benign"]]),
-            "detected": len(detected),
-            "medianLeadSeconds": leads[len(leads) // 2] if leads else None,
-            "benignAlerts": 0,
+            "faults": official["faults"],
+            "detectionRate": official["detection_rate"],
+            "medianLeadSeconds": official["median_lead_time_s"],
+            "layerAccuracy": official["layer_accuracy"],
+            "precision": official["precision"],
+            "benignAlertsPerDay": official["benign_alerts_per_day"],
+            "source": "netpulse eval, the same figures CI gates on",
         },
     }
     (OUTPUT / "index.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     print(f"\nwrote {len(index)} scenarios to {OUTPUT}")
-    if leads:
-        print(f"median lead time across detected faults: {leads[len(leads) // 2] / 60:.1f} min")
+    print(
+        f"headline: {official['median_lead_time_min']} min median lead, "
+        f"{official['detection_rate'] * 100:.0f}% detected, "
+        f"{official['layer_accuracy'] * 100:.0f}% layer accuracy, "
+        f"{official['benign_alerts_per_day']}/day benign alerts"
+    )
     return 0
 
 
