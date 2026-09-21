@@ -43,6 +43,14 @@ CUSUM_LIMIT = 6.0
 #: host metrics (CPU above all) are noisy enough that an undeadbanded z-score
 #: flags a quiet network several times an hour.
 DEADBAND_Z = 1.5
+#: Fraction of the baseline mean treated as the minimum normal range. Network
+#: latency genuinely moves by tens of percent across a day, and with a tighter
+#: floor a gateway RTT whose sampling noise is small reads a benign evening
+#: rise from 3.0 to 4.4 ms as a four sigma event. A real fault moves these
+#: features by multiples, not by a third, so the floor costs nothing in
+#: sensitivity.
+RELATIVE_SPREAD_FLOOR = 0.25
+
 #: Smoothing applied to each feature's contribution. Degradation that matters
 #: persists across samples; sampling noise does not. Roughly a four sample
 #: memory.
@@ -112,7 +120,7 @@ class FeatureBaseline:
         enormous anomaly.
         """
         reference = self.reference(hour)
-        return max(reference.std, abs(reference.mean) * 0.05, 1e-6)
+        return max(reference.std, abs(reference.mean) * RELATIVE_SPREAD_FLOOR, 1e-6)
 
     def score(self, value: float, hour: int) -> float:
         """Signed z-score, oriented so positive always means worse."""
