@@ -8,6 +8,7 @@ answer is not obvious from reading the code.
 | --- | --- | --- |
 | [0001](0001-python-reference-implementation.md) | Python reference implementation rather than Rust and Tauri | accepted |
 | [0002](0002-loopback-api-and-token-injection.md) | Loopback API with the token injected into the page | accepted |
+| [0003](0003-demo-site-not-hosted-agent.md) | Deploy a demo of the agent, not the agent | accepted |
 
 Answers to the PRD section 16 open questions are collected in
 [`../open-questions.md`](../open-questions.md).
