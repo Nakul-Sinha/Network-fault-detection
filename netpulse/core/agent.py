@@ -156,8 +156,10 @@ class Agent:
     def tick(self) -> ScoreResult | None:
         """One scoring cycle. Returns None when nothing has been measured."""
         sample = self.assembler.take()
-        if not sample.values and self.ticks > 0:
-            # Nothing new: usually every collector is paused or unsupported.
+        if not sample.values:
+            # Nothing measured this round: the first tick after a start, or
+            # every collector paused or unsupported. Scoring an empty frame
+            # would publish a number derived from no observation at all.
             return None
         self.ticks += 1
         self.repo.add_sample(sample)

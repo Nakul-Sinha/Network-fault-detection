@@ -39,6 +39,11 @@ OPEN_AFTER = 6
 CLOSE_AFTER = 20
 #: Health is smoothed so the number a user is watching does not flicker.
 HEALTH_BETA = 0.4
+#: Coverage below which the agent has too little to forecast from. Reporting
+#: a confident-looking probability derived from almost no measurements is
+#: worse than reporting nothing: the number looks the same as a real one.
+MIN_COVERAGE_FOR_RISK = 0.15
+
 #: Risk is smoothed for the same reason and a stronger one: a probability of
 #: trouble in the next fifteen minutes that swings between 0.1 and 1.0 from
 #: one sample to the next is not a forecast, it is noise with a percent sign.
@@ -121,6 +126,15 @@ class Scorer:
         risk_5m = max(floor, self.risk_5m)
         risk_15m = max(floor, self.risk_15m)
 
+        blind = frame.coverage < MIN_COVERAGE_FOR_RISK
+        if blind:
+            # Almost nothing was measured this round, usually the first tick
+            # after a restart or every collector failing at once. The L0 floor
+            # still applies, because a rule that fired saw real values; the
+            # learned forecast does not, because it did not.
+            risk_5m = floor
+            risk_15m = floor
+
         attribution = l4_rca.attribute(frame, l1_result, l2_result, hits)
         severity = self._severity(risk_15m, hits)
         self._update_health(l1_result.anomaly, l2_result.anomaly, risk_5m, floor)
@@ -141,7 +155,10 @@ class Scorer:
         )
 
         card = None
-        if attribution.primary is not None and l0_rules.severity_rank(severity) >= 1:
+        if blind:
+            # Nothing to explain and nothing to open an incident about.
+            self._above = 0
+        if not blind and attribution.primary is not None and l0_rules.severity_rank(severity) >= 1:
             card = l4_rca.explain(frame, attribution, severity, hits, risk_15m)
             self._last_card = card
 
@@ -149,7 +166,7 @@ class Scorer:
         for decision in decisions:
             self._apply_drift(decision)
 
-        opened, closed = self._update_incident(score, card, frame.ts)
+        opened, closed = (None, False) if blind else self._update_incident(score, card, frame.ts)
 
         return ScoreResult(
             score=score,

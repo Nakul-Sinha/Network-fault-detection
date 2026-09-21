@@ -723,3 +723,38 @@ def test_scorer_handles_an_empty_sample(config):
     result = scorer.observe(Sample(ts=1.0))
     assert result.score.coverage == 0.0
     assert result.score.warming_up is True
+
+
+def test_scorer_does_not_forecast_from_nothing(config):
+    """A confident number from no measurements looks like a real one.
+
+    Seen on a real restart: the agent came up with restored baselines but an
+    empty pipeline, and its very first tick published a 32 percent fifteen
+    minute risk at watch severity on zero coverage.
+    """
+    scorer = Scorer(config)
+    blind = scorer.observe(Sample(ts=1_780_000_000.0))
+    assert blind.score.coverage == 0.0
+    assert blind.score.risk_15m == 0.0
+    assert blind.score.risk_5m == 0.0
+    assert blind.score.severity == "info"
+    assert blind.opened is None
+    assert blind.card is None
+
+
+def test_carry_forward_is_not_treated_as_blindness(config):
+    """A tick with no fresh values still has knowledge, and must keep scoring."""
+    scorer = Scorer(config)
+    for sample in healthy_stream(200):
+        scorer.observe(sample)
+    quiet = scorer.observe(Sample(ts=1_780_000_000.0 + 201 * 15))
+    assert quiet.score.coverage > 0.5, "the pipeline carries recent values forward"
+
+
+def test_l0_still_speaks_on_a_sparse_frame(config):
+    """A rule that fired saw real values, so its floor survives low coverage."""
+    scorer = Scorer(config)
+    result = scorer.observe(make_sample(ts=1_780_000_000.0, gw_loss_rate=1.0, gw_rtt_ms=5000.0))
+    assert result.score.coverage < 0.15
+    assert result.score.risk_15m >= 0.9
+    assert result.score.severity == "critical"
