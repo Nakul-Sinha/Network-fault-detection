@@ -9,12 +9,22 @@ the code does not support.
     python scripts/build_demo_data.py
 
 Writes one JSON file per scenario into ``web/public/data/`` plus an index.
+
+The output is reproducible on any machine, which CI checks by regenerating
+and diffing. Getting there needed one thing that is easy to miss: the model
+derives hour of day from *local* time, correctly, because seasonality is
+about the user's day rather than UTC. That makes the generator's output
+depend on the timezone it runs in, so the recordings are anchored to a fixed
+calendar date at a fixed local hour instead of to the corpus default. A
+machine in Kolkata and a runner in UTC then feed the model the same hour and
+produce identical files.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +36,11 @@ from netpulse.ml import l0_rules  # noqa: E402
 from netpulse.ml.scorer import Scorer  # noqa: E402
 
 OUTPUT = ROOT / "web" / "public" / "data"
+
+#: Recordings are anchored to this local date and time. The hour matches the
+#: one scenarios.generate builds its diurnal curve around, so the values and
+#: the model's sense of time of day agree wherever this runs.
+ANCHOR = datetime(2026, 6, 15, 19, 0, 0)
 
 #: Human-facing titles. The scenario names are internal identifiers; these
 #: are what someone who has never read the code should see.
@@ -239,7 +254,7 @@ def main() -> int:
     index: list[dict] = []
 
     for spec in SCENARIOS:
-        run = generate(spec)
+        run = generate(spec, start_ts=ANCHOR.timestamp())
         print(f"  replaying {spec.name} ({len(run.samples)} samples) ...", end="", flush=True)
         data = build_scenario(run)
         path = OUTPUT / f"{spec.name}.json"
