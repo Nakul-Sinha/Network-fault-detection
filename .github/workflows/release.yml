@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (for a dry run)"
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  gate:
+    name: Evaluation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Tests
+        run: python -m pytest -m "not live"
+      - name: PRD targets
+        # A release that regressed lead time or started crying wolf does not
+        # go out, whatever the version number says.
+        run: python -m netpulse eval --gate
+
+  distribution:
+    name: sdist and wheel
+    runs-on: ubuntu-latest
+    needs: [gate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip build cyclonedx-bom
+          python -m build
+      - name: Software bill of materials
+        # PRD 14.3 packaging checklist.
+        run: |
+          python -m pip install -e .
+          cyclonedx-py environment --output-format json --outfile dist/sbom.json || \
+            echo "SBOM generation skipped"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distribution
+          path: dist/*
+
+  binaries:
+    name: Binary for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: [gate]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: netpulse-linux-x86_64
+          - os: windows-latest
+            asset: netpulse-windows-x86_64.exe
+          - os: macos-latest
+            asset: netpulse-macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[package]"
+      - name: Build
+        run: pyinstaller packaging/pyinstaller/netpulse.spec --clean --noconfirm
+      - name: Smoke test the binary
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then BIN=dist/netpulse.exe; else BIN=dist/netpulse; fi
+          "$BIN" version
+          "$BIN" doctor
+          "$BIN" check --json
+      - name: Rename
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv dist/netpulse.exe "dist/${{ matrix.asset }}"
+          else
+            mv dist/netpulse "dist/${{ matrix.asset }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    needs: [gate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+
+  publish:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    needs: [distribution, binaries, container]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release
+      - name: Checksums
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          body: |
+            NetPulse Local predicts network trouble minutes ahead and explains
+            which layer is failing, running entirely on your own machine.
+
+            **Install**
+
+                pip install netpulse-local
+                netpulse doctor     # what can this machine measure
+                netpulse run        # agent plus the local web UI
+
+            Standalone binaries below need no Python. The container image is
+            at `ghcr.io/${{ github.repository }}`.
+
+            Verify a download against `SHA256SUMS` before running it.
+
+            Nothing in this release sends network data anywhere. See
+            `docs/privacy.md` for exactly what is stored and where.

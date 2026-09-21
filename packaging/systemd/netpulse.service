@@ -1,0 +1,55 @@
+# NetPulse Local as a user service.
+#
+# Installed per user rather than system-wide, for two reasons. The agent
+# measures the network as that user's applications see it, and it needs no
+# privilege at all: gateway probing goes through the ping binary, traceroute
+# through UDP, and nothing writes outside the user's own directories.
+#
+#   systemctl --user enable --now netpulse
+#   loginctl enable-linger $USER    # keep it running when logged out
+#
+# For an always-on server with no interactive user, install this under
+# /etc/systemd/system with User= set, or use the container image.
+
+[Unit]
+Description=NetPulse Local predictive network health agent
+Documentation=https://github.com/Nakul-Sinha/Network-fault-detection
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/netpulse run --headless
+Restart=on-failure
+RestartSec=10s
+
+Environment=PYTHONUNBUFFERED=1
+# Uncomment to move every file the agent writes under one directory.
+# Environment=NETPULSE_HOME=%h/.netpulse
+
+# The agent is long-running and mostly idle; keep it out of the way of
+# whatever the user is actually doing.
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+# It needs no new privileges, no device access and no write access outside
+# its own directories.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/netpulse %h/.local/state/netpulse %h/.config/netpulse
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=default.target

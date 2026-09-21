@@ -1,0 +1,42 @@
+# NetPulse Local, server SKU.
+#
+# network_mode: host is the important line. On the default bridge, the agent
+# measures the bridge rather than the site network, so every incident card
+# would talk about Docker's gateway instead of the router the operator cares
+# about. Host networking also means the published port below is redundant, so
+# it is commented out; uncomment it and drop network_mode if you are on a
+# platform without host networking (Docker Desktop on macOS and Windows).
+
+services:
+  netpulse:
+    build:
+      context: ../..
+      dockerfile: packaging/docker/Dockerfile
+    image: netpulse-local:latest
+    container_name: netpulse
+    restart: unless-stopped
+    network_mode: host
+    # ports:
+    #   - "127.0.0.1:8787:8787"   # never 0.0.0.0: this API is loopback only
+    volumes:
+      - netpulse-data:/data
+    environment:
+      NETPULSE_HEADLESS: "1"
+      NETPULSE_RETENTION__RAW_DAYS: "14"
+      # Uncomment to quieten a server that nobody is sitting in front of.
+      # NETPULSE_NOTIFICATIONS__ENABLED: "false"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  netpulse-data:
