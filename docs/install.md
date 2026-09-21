@@ -12,6 +12,7 @@ pip install netpulse-local
 netpulse doctor     # what can this machine measure?
 netpulse check      # one full round, then exit
 netpulse run        # the agent, with the web UI on http://127.0.0.1:8787/
+netpulse demo       # replay a recorded fault, to see what it looks like
 ```
 
 `doctor` is worth running first. It prints your default route, whether a VPN

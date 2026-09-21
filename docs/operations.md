@@ -24,6 +24,7 @@ netpulse label bad "call dropped"
 netpulse export --hours 24
 netpulse wipe
 
+netpulse demo           # replay a recorded fault against the live agent
 netpulse eval           # replay the corpus and report the metrics
 netpulse replay samples.jsonl
 netpulse train

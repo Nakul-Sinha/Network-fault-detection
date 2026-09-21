@@ -9,10 +9,14 @@ and nothing tells you whether it was the Wi-Fi, DNS, the router or the
 internet provider. Most tools tell you after it broke, and many of them ship
 your traffic to somebody's cloud to do it.
 
+**[See it catch a failure →](https://netpulse-local.vercel.app)**  a live replay of
+the real scoring pipeline, showing the warning arrive before the breakage.
+
 ```bash
 pip install netpulse-local
 netpulse doctor     # what can this machine measure?
 netpulse run        # agent plus a web UI at http://127.0.0.1:8787/
+netpulse demo       # replay a recorded fault against the live agent
 ```
 
 ---
@@ -103,6 +107,7 @@ the parts that took several attempts to get right.
 
 | | |
 | --- | --- |
+| [Live demo](https://netpulse-local.vercel.app) | watch it catch each failure, replayed from the real pipeline |
 | [Install](docs/install.md) | every platform, plus running it all the time |
 | [Architecture](docs/architecture.md) | how it works and why it is shaped this way |
 | [Privacy](docs/privacy.md) | what is stored, and how to check |
@@ -133,6 +138,17 @@ make gate     # same, but fail if a PRD target regressed
 
 `make gate` is what CI blocks merges on. A change that quietly trades lead
 time for precision fails there rather than in someone's evening call.
+
+To see the agent handle a failure without waiting for one:
+
+```bash
+netpulse demo                      # a Wi-Fi fade, 30x, with the live web UI
+netpulse demo dns_blackhole        # or any of the fourteen scenarios
+netpulse demo --list
+```
+
+The collectors are switched off and their measurements come from the corpus.
+Everything downstream of that is the product.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers adding a collector, a template or
 an evaluation scenario. [SECURITY.md](SECURITY.md) covers what is in scope
