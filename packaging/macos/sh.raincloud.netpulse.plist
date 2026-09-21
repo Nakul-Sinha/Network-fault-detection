@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NetPulse Local as a launchd user agent.
+
+  A LaunchAgent, not a LaunchDaemon: the agent must run in the user session
+  to read Wi-Fi association state and to deliver notifications, and it needs
+  no privilege beyond that.
+
+  Install:
+    cp sh.raincloud.netpulse.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/sh.raincloud.netpulse.plist
+
+  macOS may ask for Local Network permission the first time the agent probes,
+  and for Location permission before it will reveal the Wi-Fi network name.
+  Both are optional: denying them hides the Wi-Fi layer and the agent says so
+  rather than guessing.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>sh.raincloud.netpulse</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>netpulse</string>
+        <string>run</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Keep the agent out of the way of whatever the user is doing. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>Nice</key>
+    <integer>10</integer>
+    <key>LowPriorityIO</key>
+    <true/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/netpulse.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/netpulse.err.log</string>
+</dict>
+</plist>
