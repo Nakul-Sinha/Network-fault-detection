@@ -141,9 +141,9 @@ def test_the_database_holds_no_text_at_all(repo):
     rows = repo.db.query("SELECT * FROM samples LIMIT 50")
     for row in rows:
         for value in tuple(row):
-            assert value is None or isinstance(
-                value, int | float
-            ), "a sample row must never contain text"
+            assert value is None or isinstance(value, int | float), (
+                "a sample row must never contain text"
+            )
 
 
 def test_probe_log_stores_configured_targets_not_observed_traffic(repo, quiet_config):
@@ -270,9 +270,9 @@ def test_a_long_quiet_soak_stays_under_the_alert_budget():
     congestion peak, which is where a naive detector fires.
     """
     outcome, _ = replay_run(generate_soak(hours=6.0))
-    assert (
-        outcome.alerts_per_day() <= DEFAULT_GATES["benign_alerts_per_day"]
-    ), f"{outcome.alerts} alerts in {outcome.duration_s / 3600:.1f} hours"
+    assert outcome.alerts_per_day() <= DEFAULT_GATES["benign_alerts_per_day"], (
+        f"{outcome.alerts} alerts in {outcome.duration_s / 3600:.1f} hours"
+    )
 
 
 def test_every_fault_scenario_is_detected():

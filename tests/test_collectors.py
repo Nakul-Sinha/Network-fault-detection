@@ -365,9 +365,9 @@ def test_linux_route_parser(monkeypatch, tmp_path):
     real_open = open
     monkeypatch.setattr(
         "builtins.open",
-        lambda p, *a, **k: real_open(target, *a, **k)
-        if str(p) == "/proc/net/route"
-        else real_open(p, *a, **k),
+        lambda p, *a, **k: (
+            real_open(target, *a, **k) if str(p) == "/proc/net/route" else real_open(p, *a, **k)
+        ),
     )
     assert netinfo._linux_default_route() == ("192.168.1.1", "wlp2s0")
 
