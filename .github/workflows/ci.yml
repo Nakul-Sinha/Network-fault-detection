@@ -40,6 +40,8 @@ jobs:
         run: ruff check netpulse tests
       - name: ruff format
         run: ruff format --check netpulse tests
+      - name: Workflow files parse
+        run: python scripts/check_workflows.py
 
   test:
     name: Test ${{ matrix.os }} py${{ matrix.python }}
@@ -120,23 +122,15 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --upgrade pip pip-audit
-      - name: Extract the declared runtime dependencies
-        # Auditing the environment means auditing this project too, and it
-        # has no PyPI entry to resolve, which --strict treats as an error.
-        # What the job is actually for is the dependency tree that ships to
-        # users, so it is audited directly from the project metadata.
+      - name: Audit the declared runtime dependencies
+        # PRD 12.2 asks for dependency scanning in CI. The audit reads the
+        # dependency list from the project metadata rather than the installed
+        # environment, which would include this project and has no PyPI entry
+        # for pip-audit to resolve.
         run: |
-          python - <<'PY' > requirements-runtime.txt
-          import tomllib
-          with open("pyproject.toml", "rb") as handle:
-              data = tomllib.load(handle)
-          print("
-".join(data["project"]["dependencies"]))
-          PY
+          python scripts/runtime_requirements.py > requirements-runtime.txt
           cat requirements-runtime.txt
-      - name: Audit
-        # PRD 12.2 asks for dependency scanning in CI.
-        run: pip-audit --strict --requirement requirements-runtime.txt --progress-spinner off
+          pip-audit --strict --requirement requirements-runtime.txt --progress-spinner off
 
   build:
     name: Build distribution

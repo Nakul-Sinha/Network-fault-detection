@@ -25,6 +25,7 @@ dev:
 lint:
 	$(PY) -m ruff check netpulse tests
 	$(PY) -m ruff format --check netpulse tests
+	$(PY) scripts/check_workflows.py
 
 fmt:
 	$(PY) -m ruff check --fix netpulse tests
