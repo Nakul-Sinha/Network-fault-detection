@@ -1,0 +1,151 @@
+{
+ "scenarios": [
+  {
+   "name": "healthy",
+   "title": "A quiet network",
+   "description": "Nothing wrong. This is what the agent looks like when it has nothing to say, which is most of the time and is the hardest case to get right.",
+   "benign": true,
+   "expectedLayer": null,
+   "expectedLayerLabel": null,
+   "leadSeconds": null,
+   "frames": 321
+  },
+  {
+   "name": "evening_congestion",
+   "title": "Evening congestion",
+   "description": "Everything slows by about 45 percent at peak hours and nothing breaks. A detector that flags this is one you uninstall within a week.",
+   "benign": true,
+   "expectedLayer": null,
+   "expectedLayerLabel": null,
+   "leadSeconds": null,
+   "frames": 321
+  },
+  {
+   "name": "wifi_fade",
+   "title": "Walking away from the access point",
+   "description": "Signal fades, retries climb, the link rate collapses. The classic cause of a call breaking up, and the one users most often misdiagnose.",
+   "benign": false,
+   "expectedLayer": "wifi",
+   "expectedLayerLabel": "Wi-Fi",
+   "leadSeconds": 435,
+   "frames": 321
+  },
+  {
+   "name": "wifi_interference",
+   "title": "A crowded Wi-Fi channel",
+   "description": "Signal strength stays fine but a third of frames need retransmitting. Distance is not the problem here, and the advice differs accordingly.",
+   "benign": false,
+   "expectedLayer": "wifi",
+   "expectedLayerLabel": "Wi-Fi",
+   "leadSeconds": 480,
+   "frames": 321
+  },
+  {
+   "name": "dns_slow",
+   "title": "A slow resolver",
+   "description": "Name lookups climb from 20 ms to several hundred. Pages feel slow to start even though they transfer normally once open.",
+   "benign": false,
+   "expectedLayer": "dns",
+   "expectedLayerLabel": "DNS",
+   "leadSeconds": 495,
+   "frames": 321
+  },
+  {
+   "name": "dns_blackhole",
+   "title": "DNS stops answering",
+   "description": "Total resolver failure. Everything downstream fails too, so the interesting question is whether the agent blames the cause or a symptom.",
+   "benign": false,
+   "expectedLayer": "dns",
+   "expectedLayerLabel": "DNS",
+   "leadSeconds": 540,
+   "frames": 321
+  },
+  {
+   "name": "gateway_congestion",
+   "title": "The router is struggling",
+   "description": "Round trips to your own router rise from 3 ms to tens of milliseconds with heavy jitter. The problem is inside the building.",
+   "benign": false,
+   "expectedLayer": "gateway",
+   "expectedLayerLabel": "Your router",
+   "leadSeconds": 555,
+   "frames": 321
+  },
+  {
+   "name": "gateway_down",
+   "title": "The router stops responding",
+   "description": "Nothing past it can be reached or measured. The agent has to say so without inventing conclusions about layers it can no longer see.",
+   "benign": false,
+   "expectedLayer": "gateway",
+   "expectedLayerLabel": "Your router",
+   "leadSeconds": 555,
+   "frames": 321
+  },
+  {
+   "name": "isp_path_congestion",
+   "title": "Congestion past the router",
+   "description": "The local network stays clean; latency appears beyond the second hop. This is the case a single-layer tool always gets wrong.",
+   "benign": false,
+   "expectedLayer": "path",
+   "expectedLayerLabel": "Path to internet",
+   "leadSeconds": 285,
+   "frames": 321
+  },
+  {
+   "name": "remote_service_slow",
+   "title": "The far end is slow",
+   "description": "DNS, the router and the path are all healthy. Only the service being contacted is slow, so the answer is that nothing is wrong with your network.",
+   "benign": false,
+   "expectedLayer": "remote_https",
+   "expectedLayerLabel": "Remote services",
+   "leadSeconds": 405,
+   "frames": 321
+  },
+  {
+   "name": "tls_handshake_slow",
+   "title": "Slow TLS handshakes",
+   "description": "The encrypted setup at the start of each connection dominates. Phase timing is the only way to see this at all.",
+   "benign": false,
+   "expectedLayer": "remote_https",
+   "expectedLayerLabel": "Remote services",
+   "leadSeconds": 405,
+   "frames": 321
+  },
+  {
+   "name": "vpn_overload",
+   "title": "A saturated VPN tunnel",
+   "description": "Extra latency appears inside the tunnel rather than on the path to it, and retransmissions rise with it.",
+   "benign": false,
+   "expectedLayer": "vpn",
+   "expectedLayerLabel": "VPN",
+   "leadSeconds": 540,
+   "frames": 321
+  },
+  {
+   "name": "device_pressure",
+   "title": "The laptop itself is the bottleneck",
+   "description": "CPU is pinned and the network stack is starved. The network is fine; the machine is not.",
+   "benign": false,
+   "expectedLayer": "os",
+   "expectedLayerLabel": "This device",
+   "leadSeconds": 450,
+   "frames": 321
+  },
+  {
+   "name": "captive_portal",
+   "title": "A hotel sign-in page",
+   "description": "Something intercepts every request at once. Every layer looks broken, and blaming the internet provider would be confidently wrong.",
+   "benign": false,
+   "expectedLayer": "dns",
+   "expectedLayerLabel": "DNS",
+   "leadSeconds": 0,
+   "frames": 281
+  }
+ ],
+ "generatedFrom": "netpulse.ml.scorer.Scorer over netpulse.eval.scenarios",
+ "stats": {
+  "faults": 12,
+  "detected": 12,
+  "medianLeadSeconds": 480,
+  "benignAlerts": 0
+ }
+}

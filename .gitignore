@@ -31,3 +31,7 @@ api-token
 .idea/
 .DS_Store
 Thumbs.db
+
+# Vercel
+web/.vercel
+web/node_modules
