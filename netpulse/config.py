@@ -177,7 +177,7 @@ class MlConfig(BaseModel):
 
     warmup_minutes: int = Field(30, ge=1, le=1440)
     sensitivity: float = Field(0.5, ge=0.0, le=1.0)
-    l2_learning_rate: float = Field(0.02, gt=0.0, le=1.0)
+    l2_learning_rate: float = Field(0.4, gt=0.0, le=1.0)
     l2_hidden_ratio: float = Field(0.6, gt=0.0, le=1.0)
     l3_enabled: bool = True
     l3_model_path: str | None = None

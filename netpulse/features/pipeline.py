@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import math
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -98,38 +97,121 @@ class FeatureFrame:
 class RollingWindow:
     """Bounded time window with the statistics L1 and L3 need.
 
-    Stores ``(timestamp, value)`` pairs and prunes by age rather than by
-    count, because the sampling cadence changes with battery state.
+    Timestamps and values live in parallel lists with a head offset, so a
+    prune is a pointer move rather than a copy, and the buffer is compacted
+    only occasionally.
+
+    :meth:`summarise` computes every statistic for every window in a single
+    reverse pass using running sums. That structure is the whole reason this
+    class exists. The pipeline summarises roughly 25 features on every frame,
+    and both obvious implementations are far too expensive: rescanning the
+    buffer once per window per statistic costs milliseconds, and pushing the
+    work into numpy is worse still, because a 60 element array spends all its
+    time in per-call overhead rather than arithmetic.
     """
 
-    __slots__ = ("_points", "max_age_s")
+    __slots__ = ("_head", "_ts", "_values", "max_age_s")
+
+    #: Compact the backing lists once this many dead entries accumulate.
+    COMPACT_AFTER = 64
 
     def __init__(self, max_age_s: float = MAX_WINDOW_S) -> None:
         self.max_age_s = max_age_s
-        self._points: deque[tuple[float, float]] = deque()
+        self._ts: list[float] = []
+        self._values: list[float] = []
+        self._head = 0
 
     def push(self, ts: float, value: float) -> None:
-        self._points.append((ts, value))
+        self._ts.append(ts)
+        self._values.append(value)
         self.prune(ts)
 
     def prune(self, now: float) -> None:
         cutoff = now - self.max_age_s
-        while self._points and self._points[0][0] < cutoff:
-            self._points.popleft()
+        ts = self._ts
+        head = self._head
+        size = len(ts)
+        while head < size and ts[head] < cutoff:
+            head += 1
+        self._head = head
+        if head >= self.COMPACT_AFTER:
+            del self._ts[:head]
+            del self._values[:head]
+            self._head = 0
 
     def window(self, now: float, seconds: float) -> list[float]:
         cutoff = now - seconds
-        return [value for ts, value in self._points if ts >= cutoff]
+        ts = self._ts
+        return [self._values[i] for i in range(self._head, len(ts)) if ts[i] >= cutoff]
 
-    def pairs(self, now: float, seconds: float) -> list[tuple[float, float]]:
-        cutoff = now - seconds
-        return [(ts, value) for ts, value in self._points if ts >= cutoff]
+    def summarise(self, name: str, now: float, current: float, into: dict[str, float]) -> None:
+        """Compute every window statistic for this feature in one reverse pass."""
+        ts = self._ts
+        values = self._values
+        head = self._head
+        index = len(ts) - 1
+        if index < head:
+            return
+
+        reference = ts[index]
+        count = 0
+        sum_v = sum_vv = 0.0
+        sum_t = sum_tt = sum_tv = 0.0
+
+        for seconds in WINDOWS:  # ascending, so the scan never rewinds
+            cutoff = now - seconds
+            while index >= head and ts[index] >= cutoff:
+                minutes = (ts[index] - reference) / 60.0
+                value = values[index]
+                count += 1
+                sum_v += value
+                sum_vv += value * value
+                sum_t += minutes
+                sum_tt += minutes * minutes
+                sum_tv += minutes * value
+                index -= 1
+            if count == 0:
+                continue
+
+            average = sum_v / count
+            if count > 1:
+                variance = (sum_vv - count * average * average) / (count - 1)
+                spread = math.sqrt(variance) if variance > 0.0 else 0.0
+            else:
+                spread = 0.0
+
+            label = f"{name}_{seconds // 60}m"
+            into[f"{label}_mean"] = average
+            into[f"{label}_std"] = spread
+            if seconds < 300:
+                continue
+
+            slope = 0.0
+            if count >= 3:
+                t_mean = sum_t / count
+                denominator = sum_tt - count * t_mean * t_mean
+                if denominator > 1e-9:
+                    slope = (sum_tv - count * t_mean * average) / denominator
+            into[f"{label}_slope"] = slope
+
+            if count >= 4:
+                # A spread floor keeps a perfectly flat feature from turning a
+                # rounding wobble into an enormous z-score.
+                floor = max(1e-6, abs(average) * 0.02)
+                into[f"{label}_z"] = (current - average) / max(spread, floor)
+            else:
+                into[f"{label}_z"] = 0.0
 
     def last(self) -> float | None:
-        return self._points[-1][1] if self._points else None
+        return self._values[-1] if len(self._values) > self._head else None
+
+    def clear(self) -> None:
+        self._ts.clear()
+        self._values.clear()
+        self._head = 0
 
     def __len__(self) -> int:
-        return len(self._points)
+        return len(self._ts) - self._head
 
 
 def mean(values: list[float]) -> float:
@@ -137,6 +219,7 @@ def mean(values: list[float]) -> float:
 
 
 def stddev(values: list[float]) -> float:
+    """Sample standard deviation, used by tests and the drift monitor."""
     if len(values) < 2:
         return 0.0
     average = mean(values)
@@ -240,17 +323,7 @@ class FeaturePipeline:
             if name not in values or len(window) == 0:
                 continue
             window.prune(now)
-            current = values[name]
-            for seconds in WINDOWS:
-                sample = window.window(now, seconds)
-                if not sample:
-                    continue
-                label = f"{name}_{seconds // 60}m"
-                aggregates[f"{label}_mean"] = mean(sample)
-                aggregates[f"{label}_std"] = stddev(sample)
-                if seconds >= 300:
-                    aggregates[f"{label}_slope"] = slope_per_minute(window.pairs(now, seconds))
-                    aggregates[f"{label}_z"] = robust_z(current, sample)
+            window.summarise(name, now, values[name], aggregates)
         return aggregates
 
     def _coverage(self, values: dict[str, float]) -> tuple[float, dict[str, float]]:
@@ -281,7 +354,7 @@ class FeaturePipeline:
 
     def reset(self) -> None:
         for window in self._windows.values():
-            window._points.clear()
+            window.clear()
         self._last_value.clear()
         self.samples_seen = 0
 
