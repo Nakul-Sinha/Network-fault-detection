@@ -12,6 +12,8 @@ default.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from netpulse.collectors import gateway, netinfo, path, wifi
@@ -570,3 +572,70 @@ def test_live_https_probe_splits_phases(config):
     assert timings.tls_ms is not None and timings.tls_ms >= 0
     assert timings.ttfb_ms is not None
     assert timings.total_ms >= timings.tcp_ms
+
+
+# ----------------------------------------------------------- captive portal
+
+
+def test_captive_classifies_a_clean_response():
+    from netpulse.collectors.captive import classify_response
+
+    raw = b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nsuccess\n"
+    assert classify_response(raw) == (False, "no portal detected")
+
+
+def test_captive_flags_a_redirect():
+    from netpulse.collectors.captive import classify_response
+
+    raw = b"HTTP/1.1 302 Found\r\nLocation: http://login.hotel\r\n\r\n"
+    intercepted, detail = classify_response(raw)
+    assert intercepted is True
+    assert "redirect" in detail
+
+
+def test_captive_flags_a_substituted_body():
+    from netpulse.collectors.captive import classify_response
+
+    raw = b"HTTP/1.1 200 OK\r\n\r\n<html>Please sign in to continue</html>"
+    intercepted, _ = classify_response(raw)
+    assert intercepted is True
+
+
+def test_captive_does_not_guess_when_only_headers_arrived():
+    """The bug this guards: one recv returns headers, the body follows later.
+
+    Treating the missing body as a mismatch reported a captive portal on a
+    healthy network, with every other layer green.
+    """
+    from netpulse.collectors.captive import classify_response
+
+    headers_only = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\n"
+    intercepted, detail = classify_response(headers_only)
+    assert intercepted is None, detail
+    assert "did not arrive" in detail
+
+
+def test_captive_says_nothing_on_an_empty_read():
+    from netpulse.collectors.captive import classify_response
+
+    assert classify_response(b"")[0] is None
+
+
+def test_captive_reader_reassembles_a_split_response():
+    """Headers and body in separate segments must be joined before judging."""
+    from netpulse.collectors.captive import _read_response, classify_response
+
+    class SplitSocket:
+        def __init__(self, parts):
+            self.parts = list(parts)
+
+        def settimeout(self, _value):
+            pass
+
+        def recv(self, _size):
+            return self.parts.pop(0) if self.parts else b""
+
+    sock = SplitSocket([b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n", b"success\n"])
+    raw = _read_response(sock, deadline=time.perf_counter() + 5)
+    assert b"success" in raw
+    assert classify_response(raw) == (False, "no portal detected")
