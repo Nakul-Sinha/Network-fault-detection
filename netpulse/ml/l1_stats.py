@@ -56,6 +56,28 @@ RELATIVE_SPREAD_FLOOR = 0.25
 #: memory.
 PERSISTENCE_BETA = 0.3
 
+#: Ceiling on a single feature's contribution. Anything past a handful of
+#: sigma means the same thing in practice: this feature is broken. Leaving it
+#: unbounded produced contributions in the thousands when a gateway RTT went
+#: from 3 ms to a 5 second timeout, and the smoothed value then took several
+#: minutes to decay after recovery, so the agent kept reporting a resolved
+#: outage as critical.
+MAX_CONTRIBUTION = 12.0
+
+#: Contribution above which a settled baseline stops learning. Without this a
+#: sustained fault trains the baseline to accept itself: one large jump
+#: inflates the variance estimate, which widens the spread, which shrinks the
+#: next z-score, and a real outage fades from view within a couple of minutes
+#: while it is still happening.
+FREEZE_CONTRIBUTION = 1.5
+#: Observations a baseline needs before it is allowed to freeze. A cold
+#: baseline that froze would never warm up at all.
+FREEZE_MIN_COUNT = 30
+#: Upper bound on consecutive frozen updates, about an hour at the default
+#: cadence. A network really can change for good, and the drift monitor is
+#: the deliberate path to relearning; this is the backstop.
+MAX_FROZEN_STEPS = 240
+
 
 @dataclass(slots=True)
 class OnlineMoments:
@@ -105,6 +127,7 @@ class FeatureBaseline:
     cusum_high: float = 0.0
     cusum_low: float = 0.0
     smoothed: float = 0.0
+    frozen_steps: int = 0
 
     def reference(self, hour: int) -> OnlineMoments:
         bucket = self.hourly[hour % HOURS]
@@ -132,22 +155,34 @@ class FeatureBaseline:
 
     def contribution(self, value: float, hour: int) -> float:
         """Deadbanded anomaly contribution for one observation."""
-        return max(0.0, self.score(value, hour) - DEADBAND_Z)
+        return min(MAX_CONTRIBUTION, max(0.0, self.score(value, hour) - DEADBAND_Z))
 
     def update(self, value: float, hour: int) -> float:
         """Fold in an observation and return its smoothed contribution.
 
         The returned value is smoothed rather than instantaneous so that a
         single noisy sample cannot move the health score. Learning happens
-        after scoring, so a frame is always judged against the past.
+        after scoring, so a frame is always judged against the past, and is
+        skipped entirely while the observation looks wrong.
         """
         oriented = self.score(value, hour)
-        instant = max(0.0, oriented - DEADBAND_Z)
+        instant = min(MAX_CONTRIBUTION, max(0.0, oriented - DEADBAND_Z))
         self.smoothed += PERSISTENCE_BETA * (instant - self.smoothed)
         self._update_cusum(oriented)
+        if self._should_freeze(instant):
+            self.frozen_steps += 1
+            return self.smoothed
+        self.frozen_steps = 0
         self.global_moments.update(value)
         self.hourly[hour % HOURS].update(value)
         return self.smoothed
+
+    def _should_freeze(self, instant: float) -> bool:
+        if self.global_moments.count < FREEZE_MIN_COUNT:
+            return False
+        if self.frozen_steps >= MAX_FROZEN_STEPS:
+            return False
+        return instant >= FREEZE_CONTRIBUTION
 
     def _update_cusum(self, oriented_z: float) -> None:
         self.cusum_high = max(0.0, min(CUSUM_LIMIT, self.cusum_high + oriented_z - CUSUM_K))
@@ -167,6 +202,7 @@ class FeatureBaseline:
             "cusum_high": self.cusum_high,
             "cusum_low": self.cusum_low,
             "smoothed": self.smoothed,
+            "frozen_steps": self.frozen_steps,
         }
 
     @classmethod
@@ -182,6 +218,7 @@ class FeatureBaseline:
             cusum_high=float(data.get("cusum_high", 0.0)),
             cusum_low=float(data.get("cusum_low", 0.0)),
             smoothed=float(data.get("smoothed", 0.0)),
+            frozen_steps=int(data.get("frozen_steps", 0)),
         )
 
 

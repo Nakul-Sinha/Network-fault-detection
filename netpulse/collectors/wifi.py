@@ -274,7 +274,7 @@ def _parse_airport(text: str) -> dict[str, float]:
     fields: dict[str, float] = {}
     _put_float(fields, "wifi_rssi_dbm", raw.get("agrctlrssi"))
     _put_float(fields, "wifi_noise_dbm", raw.get("agrctlnoise"))
-    _put_float(fields, "wifi_link_mbps", raw.get("lastxrate"))
+    _put_float(fields, "wifi_link_mbps", raw.get("lasttxrate"))
     _put_float(fields, "wifi_channel", (raw.get("channel") or "").split(",")[0])
     if raw.get("bssid"):
         fields["bssid_hash"] = hash_to_float(raw["bssid"])
