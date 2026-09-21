@@ -41,6 +41,9 @@ MAINTENANCE_INTERVAL_S = 300.0
 #: learning to a hard power loss is an acceptable trade for not writing a
 #: few hundred kilobytes every fifteen seconds.
 STATE_SAVE_INTERVAL_S = 900.0
+#: Minimum gap between two on-suspicion probe rounds, so a flapping severity
+#: cannot turn into a probe storm.
+SUSPICION_COOLDOWN_S = 120.0
 
 
 class SampleAssembler:
@@ -103,6 +106,8 @@ class Agent:
         self.ticks = 0
         self._last_maintenance = 0.0
         self._last_state_save = 0.0
+        self._last_severity = "info"
+        self._last_suspicion = 0.0
         self._restore_state()
         self._restore_pause_state()
 
@@ -159,10 +164,36 @@ class Agent:
 
         result = self.scorer.observe(sample)
         self.repo.add_score(result.score)
+        self._probe_on_suspicion(result)
         self._persist_incidents(result)
         self._persist_drift(result)
         self._maybe_maintain()
         return result
+
+    def _probe_on_suspicion(self, result: ScoreResult) -> None:
+        """Pull the slow probes forward when things start looking wrong.
+
+        PRD 6.3 allows traceroute to run on suspicion rather than only on its
+        cadence. The captive portal check gets the same treatment for a
+        concrete reason: on its ordinary five minute cadence, a sign-in page
+        can intercept the network and the agent will spend minutes blaming
+        DNS before it finds out why.
+        """
+        from ..ml.l0_rules import severity_rank
+
+        previous, current = self._last_severity, result.score.severity
+        self._last_severity = current
+        if severity_rank(current) <= severity_rank(previous):
+            return
+        if severity_rank(current) < severity_rank("watch"):
+            return
+        now = time.time()
+        if now - self._last_suspicion < SUSPICION_COOLDOWN_S:
+            return
+        self._last_suspicion = now
+        woken = self.supervisor.trigger("path", "captive")
+        if woken:
+            log.info("severity rose to %s, pulling forward: %s", current, ", ".join(woken))
 
     def _on_result(self, collector: Collector, result: CollectorResult) -> None:
         """Called from a collector worker thread."""
