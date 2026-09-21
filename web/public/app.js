@@ -78,7 +78,7 @@
         // them from the evaluation harness. Hard-coding them in the markup
         // would let the page drift away from what the gate actually enforces.
         var s = data.stats || {};
-        if (s.medianLeadSeconds) text("statLead", minutes(s.medianLeadSeconds));
+        if (s.medianLeadLabel) text("statLead", s.medianLeadLabel);
         if (s.detectionRate !== undefined) text("statDetect", Math.round(s.detectionRate * 100) + "%");
         if (s.layerAccuracy !== undefined) text("statLayer", Math.round(s.layerAccuracy * 100) + "%");
         if (s.benignAlertsPerDay !== undefined) {

@@ -293,6 +293,11 @@ def main() -> int:
             "faults": official["faults"],
             "detectionRate": official["detection_rate"],
             "medianLeadSeconds": official["median_lead_time_s"],
+            # Pre-formatted here so the page and the docs cannot round the
+            # same number two different ways. Python and JavaScript disagree
+            # about 6.25, and a reader comparing 6.2 with 6.3 has no way to
+            # know they are the same measurement.
+            "medianLeadLabel": f"{official['median_lead_time_s'] / 60:.1f} min",
             "layerAccuracy": official["layer_accuracy"],
             "precision": official["precision"],
             "benignAlertsPerDay": official["benign_alerts_per_day"],
