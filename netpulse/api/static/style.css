@@ -53,6 +53,12 @@
 
 * { box-sizing: border-box; }
 
+/* A class that sets `display` outbids the user-agent rule for [hidden], so
+   an element toggled with `el.hidden = true` stays on screen. This bit both
+   the warm-up chip here and the capability list in the agent UI. */
+[hidden] { display: none !important; }
+
+
 body {
   margin: 0;
   background: var(--bg);

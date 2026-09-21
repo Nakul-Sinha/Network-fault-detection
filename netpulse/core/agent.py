@@ -153,9 +153,17 @@ class Agent:
 
     # ----------------------------------------------------------------- tick
 
-    def tick(self) -> ScoreResult | None:
-        """One scoring cycle. Returns None when nothing has been measured."""
+    def tick(self, *, timestamp: float | None = None) -> ScoreResult | None:
+        """One scoring cycle. Returns None when nothing has been measured.
+
+        ``timestamp`` overrides the sample time. The live agent never passes
+        it; the demo driver does, so a replayed recording keeps its real
+        spacing instead of inheriting an accelerated wall clock, which would
+        change what the rolling windows see.
+        """
         sample = self.assembler.take()
+        if timestamp is not None:
+            sample.ts = timestamp
         if not sample.values:
             # Nothing measured this round: the first tick after a start, or
             # every collector paused or unsupported. Scoring an empty frame

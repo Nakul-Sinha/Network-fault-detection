@@ -698,3 +698,85 @@ def _midday() -> float:
 
 def _at_hour(hour: int) -> float:
     return time.mktime((2026, 9, 21, hour, 0, 0, 0, 0, -1))
+
+
+# --------------------------------------------------------------------- demo
+
+
+def test_demo_config_switches_every_collector_off(config):
+    from netpulse.eval.demo import demo_config
+
+    toggles = demo_config(config).collectors
+    for layer in ("system", "wifi", "dns", "gateway", "path", "https", "captive"):
+        assert getattr(toggles, layer) is False, layer
+
+
+def test_demo_samples_keep_their_spacing():
+    """Compressing timestamps would change what the rolling windows see."""
+    from netpulse.eval.demo import FRAME_SECONDS, prepare_samples
+    from netpulse.eval.scenarios import SCENARIOS_BY_NAME, generate
+
+    run = generate(SCENARIOS_BY_NAME["wifi_fade"])
+    samples = prepare_samples(run)
+    assert len(samples) == len(run.samples)
+    gaps = {round(samples[i + 1].ts - samples[i].ts, 3) for i in range(20)}
+    assert gaps == {FRAME_SECONDS}
+
+
+def test_demo_anchors_to_the_hour_the_corpus_was_built_for():
+    """Evening-shaped values dropped into a 4am baseline confuse the model."""
+    import datetime as dt
+
+    from netpulse.eval.demo import SCENARIO_START_HOUR, anchor_start
+    from netpulse.eval.scenarios import SCENARIOS_BY_NAME, generate
+
+    run = generate(SCENARIOS_BY_NAME["wifi_fade"])
+    for hour in (2, 9, 14, 23):
+        now = dt.datetime.now().replace(hour=hour, minute=30, second=0, microsecond=0).timestamp()
+        start = anchor_start(run, now=now)
+        assert dt.datetime.fromtimestamp(start).hour == int(SCENARIO_START_HOUR)
+        assert start <= now, "the recording must land in the past, not the future"
+        assert now - start < 24 * 3600 + 60, "and inside the last day"
+
+
+def test_demo_driver_feeds_the_agent(quiet_config):
+    from netpulse.eval.demo import DemoDriver
+    from netpulse.eval.scenarios import SCENARIOS_BY_NAME, generate
+
+    run = generate(SCENARIOS_BY_NAME["wifi_fade"])
+    run.samples = run.samples[:40]
+    agent = Agent(quiet_config, notifier=Notifier(quiet_config, RecordingBackend()))
+    seen: list = []
+    driver = DemoDriver(agent, run, speed=100000, on_frame=lambda i, r: seen.append(r))
+    try:
+        driver.start()
+        deadline = time.monotonic() + 20
+        while len(seen) < 40 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert len(seen) >= 40
+        assert agent.repo.sample_count() >= 40
+    finally:
+        driver.stop()
+        agent.stop(timeout=3.0)
+        agent.db.close()
+
+
+def test_demo_rejects_an_unknown_scenario():
+    from netpulse.eval.demo import resolve_scenario
+
+    with pytest.raises(ValueError, match="unknown scenario"):
+        resolve_scenario("not-a-real-fault")
+
+
+def test_tick_accepts_an_explicit_timestamp(agent):
+    agent.assembler.update({"gw_rtt_ms": 3.0})
+    result = agent.tick(timestamp=1_780_000_000.0)
+    assert result is not None
+    assert result.score.ts == 1_780_000_000.0
+
+
+def test_cli_demo_list(capsys):
+    assert main(["demo", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "wifi_fade" in out
+    assert "captive_portal" in out
