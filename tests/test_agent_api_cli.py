@@ -210,6 +210,13 @@ def test_agent_tick_is_a_noop_without_new_data(agent):
     assert agent.tick() is None
 
 
+def test_agent_does_not_score_before_anything_is_measured(agent):
+    """The first tick after a start has no measurements yet."""
+    assert agent.tick() is None
+    assert agent.repo.latest_score() is None
+    assert agent.health_summary()["health"] is None
+
+
 def test_agent_redacts_probe_details(agent, quiet_config):
     collector = StubCollector(quiet_config)
     agent._on_result(collector, collector.collect())
