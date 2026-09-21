@@ -11,7 +11,7 @@
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path(os.getcwd())
 
@@ -24,7 +24,11 @@ datas = [
 ]
 datas += collect_data_files("netpulse", includes=["py.typed"])
 
-hiddenimports = [
+# The CLI imports its heavier subsystems inside the functions that need
+# them, so the whole package is collected rather than relying on static
+# analysis to find every one of them.
+hiddenimports = collect_submodules("netpulse")
+hiddenimports += [
     "uvicorn.logging",
     "uvicorn.loops.auto",
     "uvicorn.protocols.http.auto",
@@ -33,7 +37,10 @@ hiddenimports = [
 ]
 
 analysis = Analysis(
-    [str(ROOT / "netpulse" / "__main__.py")],
+    # Not netpulse/__main__.py: PyInstaller bundles the entry script as a
+    # top-level module with no parent package, so its relative import fails
+    # at startup. entry.py does the same job with an absolute import.
+    [str(ROOT / "packaging" / "pyinstaller" / "entry.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=datas,

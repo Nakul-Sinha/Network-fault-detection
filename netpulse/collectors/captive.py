@@ -84,7 +84,7 @@ def detect_portal(url: str, *, timeout_s: float = 5.0) -> tuple[bool | None, str
             "Connection: close\r\n\r\n"
         ).encode("ascii", "ignore")
         sock.sendall(request)
-        head = sock.recv(READ_BYTES)
+        raw = _read_response(sock, deadline=started + timeout_s)
     except OSError as exc:
         elapsed = (time.perf_counter() - started) * 1000.0
         return None, f"captive probe unreachable: {exc.strerror or exc}", elapsed
@@ -94,18 +94,68 @@ def detect_portal(url: str, *, timeout_s: float = 5.0) -> tuple[bool | None, str
                 sock.close()
 
     elapsed = (time.perf_counter() - started) * 1000.0
-    status = _status(head)
-    body = head.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in head else b""
+    intercepted, detail = classify_response(raw)
+    return intercepted, detail, elapsed
 
+
+def _read_response(sock: socket.socket, *, deadline: float) -> bytes:
+    """Read until the body has arrived, the peer closes, or time runs out.
+
+    A single recv is not enough and the reason is worth stating: servers
+    routinely send headers and body in separate segments, so one read returns
+    the headers alone. Comparing an empty body against the expected text then
+    reports a captive portal on a perfectly healthy network, which is exactly
+    what happened: every other layer green, and the agent insisting a sign-in
+    page had taken over.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while total < READ_BYTES:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            break
+        sock.settimeout(remaining)
+        try:
+            chunk = sock.recv(READ_BYTES - total)
+        except TimeoutError:
+            break
+        if not chunk:
+            break  # peer closed, which is the usual end with Connection: close
+        chunks.append(chunk)
+        total += len(chunk)
+        raw = b"".join(chunks)
+        separator = raw.find(b"\r\n\r\n")
+        if separator != -1 and len(raw) > separator + 4:
+            break  # headers plus at least one byte of body
+    return b"".join(chunks)
+
+
+def classify_response(raw: bytes) -> tuple[bool | None, str]:
+    """Decide whether a response looks like an interception.
+
+    Split out from the socket work so the judgement can be tested against
+    exact bytes rather than against whatever the network did that day.
+    """
+    if not raw:
+        return None, "captive probe returned nothing"
+
+    status = _status(raw)
     if status is None:
-        return True, "non-HTTP response to the portal probe", elapsed
+        return True, "non-HTTP response to the portal probe"
     if status in (301, 302, 303, 307, 308):
-        return True, f"portal probe redirected (HTTP {status})", elapsed
+        return True, f"portal probe redirected (HTTP {status})"
     if status != 200:
-        return True, f"portal probe answered HTTP {status}", elapsed
+        return True, f"portal probe answered HTTP {status}"
+
+    separator = raw.find(b"\r\n\r\n")
+    if separator == -1:
+        return None, "portal probe response had no body to check"
+    body = raw[separator + 4 :]
+    if not body.strip():
+        return None, "portal probe body did not arrive before the timeout"
     if EXPECTED_BODY not in body.lower():
-        return True, "portal probe body did not match the expected response", elapsed
-    return False, "no portal detected", elapsed
+        return True, "portal probe body did not match the expected response"
+    return False, "no portal detected"
 
 
 def _status(head: bytes) -> int | None:
