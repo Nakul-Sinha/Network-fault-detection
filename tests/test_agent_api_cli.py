@@ -89,9 +89,14 @@ def _token(client: TestClient) -> dict[str, str]:
 
 
 def test_notifier_respects_severity_floor(config):
+    # Every notifier test pins the clock. Without it this one passes all day
+    # and fails overnight, because quiet hours would correctly hold the
+    # notification back, and a test that depends on when it runs is worse
+    # than no test.
     notifier = Notifier(config, RecordingBackend())
-    assert not notifier.notify(_note("info"))
-    assert notifier.notify(_note("risk"))
+    noon = _midday()
+    assert not notifier.notify(_note("info"), now=noon)
+    assert notifier.notify(_note("risk"), now=noon)
 
 
 def test_notifier_cooldown_is_per_layer(config):
@@ -138,7 +143,7 @@ def test_disabled_notifications_send_nothing():
 
     config = NetPulseConfig.model_validate({"notifications": {"enabled": False}})
     notifier = Notifier(config, RecordingBackend())
-    assert not notifier.notify(_note("critical"))
+    assert not notifier.notify(_note("critical"), now=_midday())
     assert notifier.status()["suppressed"] == 1
 
 
