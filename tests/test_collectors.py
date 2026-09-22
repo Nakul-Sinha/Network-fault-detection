@@ -257,13 +257,23 @@ def test_ping_command_per_platform(monkeypatch, platform, expected_flag):
     assert command[-1] == "192.168.1.1"
 
 
-def test_gateway_reports_loss_when_no_replies(monkeypatch, config):
+def test_gateway_reports_loss_when_a_working_gateway_goes_quiet(monkeypatch, config):
+    """Total loss is only an outage once the gateway has answered at least once.
+
+    This test used to send silence from the very first round and assert 100%
+    loss, which is what made the agent declare "your router is not
+    responding" on an iPhone hotspot while DNS and HTTPS were both fine.
+    """
     monkeypatch.setattr(
         netinfo, "default_route", lambda **_: netinfo.RouteInfo(gateway="192.168.1.1")
     )
-    monkeypatch.setattr(gateway, "run", lambda *a, **k: _fake_command(""))
+    replies = iter(["Reply from 192.168.1.1: bytes=32 time=2ms TTL=64\n", "", "", ""])
+    monkeypatch.setattr(gateway, "run", lambda *a, **k: _fake_command(next(replies, "")))
     collector = GatewayCollector(config, build_budget(config))
     collector._capability = Capability(True)
+
+    assert collector.collect().values["gw_rtt_ms"] == 2.0
+
     result = collector.collect()
     assert result.values["gw_loss_rate"] == 1.0
     assert result.values["gw_rtt_ms"] == config.probes.timeout_s * 1000.0
@@ -639,3 +649,66 @@ def test_captive_reader_reassembles_a_split_response():
     raw = _read_response(sock, deadline=time.perf_counter() + 5)
     assert b"success" in raw
     assert classify_response(raw) == (False, "no portal detected")
+
+
+# ------------------------------------------------------------- gateway ICMP
+
+
+def _gateway_collector(config, monkeypatch, replies: list[str]):
+    """A gateway collector whose ping output is scripted."""
+    from netpulse.collectors import gateway as gw
+
+    calls = {"n": 0}
+
+    class Fake:
+        def __init__(self, text):
+            self.text = text
+
+    def fake_run(_cmd, **_kw):
+        text = replies[min(calls["n"], len(replies) - 1)]
+        calls["n"] += 1
+        return Fake(text)
+
+    monkeypatch.setattr(gw, "run", fake_run)
+    monkeypatch.setattr(
+        gw.netinfo, "default_route", lambda **_k: gw.netinfo.RouteInfo(gateway="10.0.0.1")
+    )
+    return gw.GatewayCollector(config)
+
+
+REPLY = "Reply from 10.0.0.1: bytes=32 time=3ms TTL=64\n" * 4
+SILENCE = "Request timed out.\n" * 4
+
+
+def test_gateway_that_never_answers_is_reported_unmeasurable(config, monkeypatch):
+    """An iPhone hotspot filters ICMP. That is not a router outage.
+
+    Reporting 100% loss would claim an outage that is not happening and feed
+    a permanent 5000 ms round trip into the baselines, pinning health near
+    zero forever on a perfectly working network.
+    """
+    collector = _gateway_collector(config, monkeypatch, [SILENCE])
+    result = collector.collect()
+    assert result.values == {}, "a filtered gateway must not emit measurements"
+    assert "cannot be measured" in result.skipped_reason
+    assert "filter ICMP" in result.probes[0].detail
+
+
+def test_gateway_that_answered_then_stopped_is_a_real_outage(config, monkeypatch):
+    """Once it has answered, silence means something actually broke."""
+    collector = _gateway_collector(config, monkeypatch, [REPLY, SILENCE])
+
+    first = collector.collect()
+    assert first.values["gw_loss_rate"] == 0.0
+    assert first.values["gw_rtt_ms"] == 3.0
+
+    second = collector.collect()
+    assert second.values["gw_loss_rate"] == 1.0
+    assert second.values["gw_rtt_ms"] > 1000, "the timeout ceiling feeds the L0 rule"
+
+
+def test_gateway_partial_loss_is_still_measured(config, monkeypatch):
+    partial = "Reply from 10.0.0.1: bytes=32 time=3ms TTL=64\nRequest timed out.\n"
+    collector = _gateway_collector(config, monkeypatch, [partial])
+    result = collector.collect()
+    assert result.values["gw_loss_rate"] == 0.75
