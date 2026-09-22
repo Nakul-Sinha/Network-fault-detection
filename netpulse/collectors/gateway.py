@@ -27,6 +27,13 @@ class GatewayCollector(Collector):
     layer = "gateway"
     active = True
 
+    def __init__(self, config, budget=None) -> None:
+        super().__init__(config, budget)
+        # Whether this gateway has answered a ping even once. It separates a
+        # router that is down from one that simply filters ICMP.
+        self._ever_answered = False
+        self._filtered_rounds = 0
+
     def interval_s(self) -> float:
         return float(self.config.probes.gateway_interval_s)
 
@@ -53,13 +60,42 @@ class GatewayCollector(Collector):
         completed = run(command, timeout=timeout * PING_COUNT + 4.0)
         rtts = parse_ping_times(completed.text)
 
+        if rtts:
+            self._ever_answered = True
+
+        if not rtts and not self._ever_answered:
+            # This gateway has never once answered since the agent started, so
+            # the likely explanation is a device that filters ICMP rather than
+            # a device that is down. iOS personal hotspots do this, and so do
+            # plenty of corporate access points and ISP routers.
+            #
+            # Reporting 100% loss here would be wrong twice over: it claims an
+            # outage that is not happening, and it feeds a permanent 5000 ms
+            # round trip into the baselines, so health on such a network would
+            # sit near zero forever. Emitting nothing is honest: the layer is
+            # unmeasurable, and coverage in the UI drops to say so.
+            self._filtered_rounds += 1
+            result.probe(
+                self.name,
+                route.gateway,
+                False,
+                None,
+                "no reply; this gateway appears to filter ICMP",
+            )
+            return CollectorResult(
+                ok=True,
+                probes=result.probes,
+                skipped_reason="the gateway does not answer pings, so it cannot be measured",
+            )
+
         loss = 1.0 - (len(rtts) / PING_COUNT)
         result.set("gw_loss_rate", max(0.0, min(1.0, loss)))
         if rtts:
             result.set("gw_rtt_ms", sum(rtts) / len(rtts))
             result.set("gw_jitter_ms", mean_absolute_deviation(rtts))
         else:
-            # Unreachable gateway is an L0 condition, not a missing value.
+            # It answered before and has stopped, which is a real outage and an
+            # L0 condition rather than a missing value.
             result.set("gw_rtt_ms", timeout * 1000.0)
             result.set("gw_jitter_ms", 0.0)
 
