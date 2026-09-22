@@ -3,143 +3,119 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
 <title>NetPulse Local</title>
-<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#050506">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
+<!-- The server substitutes the placeholder below. The variable name must
+     not itself contain it, or the substitution renames the variable too. -->
+<script>window.NETPULSE_TOKEN = "__NETPULSE_TOKEN__";</script>
 
-<header class="topbar">
-  <div class="brand">
-    <span class="dot" id="statusDot" aria-hidden="true"></span>
-    <h1>NetPulse Local</h1>
-  </div>
-  <div class="topbar-actions">
-    <span id="updated" class="muted" aria-live="polite">connecting</span>
-    <button id="pauseBtn" type="button" class="btn" aria-pressed="false">Pause probing</button>
-  </div>
-</header>
+<main class="stage">
+  <section class="glass" aria-labelledby="verdict">
 
-<main id="main">
+    <header class="bar">
+      <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="bar-title">netpulse</span>
+      <span class="bar-state"><i id="pulse" class="pulse" aria-hidden="true"></i><span id="barState">connecting</span></span>
+    </header>
 
-  <section class="panel score-panel" aria-labelledby="scoreHeading">
-    <h2 id="scoreHeading" class="sr-only">Current health</h2>
-    <div class="score">
-      <div class="score-number"><span id="healthValue">--</span><span class="score-max">/100</span></div>
-      <div class="score-meta">
-        <span id="severityChip" class="chip">starting</span>
-        <span id="warmupChip" class="chip chip-quiet" hidden>learning your network</span>
+    <div class="body">
+
+      <div class="main">
+        <div class="lead">
+          <!-- The whole answer, for someone who wants nothing else. -->
+          <p class="eyebrow" id="eyebrow">your network</p>
+          <h1 class="verdict" id="verdict">Checking…</h1>
+          <p class="because" id="because">Starting up.</p>
+
+          <!-- Last hour at a glance. Deliberately unlabelled: the shape is the
+               message, and axis numbers would invite reading it as a metric. -->
+          <div class="trend">
+            <pre class="spark" id="spark" aria-hidden="true"></pre>
+            <p class="trend-note" id="trendNote">last hour</p>
+          </div>
+        </div>
+
+        <div class="side">
+          <!-- Only appears when there is something to actually do. -->
+          <div class="todo" id="todo" hidden>
+            <p class="todo-head">try this</p>
+            <ol id="todoList"></ol>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <button type="button" class="ghost" id="detailsToggle" aria-expanded="false" aria-controls="details">
+          details
+        </button>
+        <span class="updated" id="updated"></span>
+      </div>
+
+      <!-- Everything below is hidden by default. It is here for the person
+           who wants to audit the agent, not for the person who wants to know
+           whether their call is about to drop. -->
+      <div class="details" id="details" hidden>
+
+        <div class="dcol">
+        <div class="row">
+          <span class="k">health score</span>
+          <span class="v" id="dHealth">--</span>
+        </div>
+        <div class="row">
+          <span class="k">risk, next 5 / 15 min</span>
+          <span class="v" id="dRisk">--</span>
+        </div>
+        <div class="row">
+          <span class="k">signals available</span>
+          <span class="v" id="dCoverage">--</span>
+        </div>
+
+        <p class="sub">controls</p>
+        <div class="actions">
+          <button type="button" class="ghost" id="pauseBtn">pause probing</button>
+          <button type="button" class="ghost" id="exportBtn">export a report</button>
+          <button type="button" class="ghost danger" id="wipeBtn">delete all data</button>
+        </div>
+        <p class="note" id="actionNote"></p>
+
+        <p class="sub">was it right?</p>
+        <div class="actions">
+          <button type="button" class="ghost" data-label="bad">it was bad</button>
+          <button type="button" class="ghost" data-label="ok">it was fine</button>
+          <button type="button" class="ghost" data-label="unsure">not sure</button>
+        </div>
+        </div>
+
+        <div class="dcol">
+        <p class="sub">where it is looking</p>
+        <pre class="layers" id="dLayers">--</pre>
+
+        <p class="sub">privacy</p>
+        <p class="note" id="dPrivacy">
+          Everything measured stays on this machine. No packet contents are ever
+          captured and nothing is uploaded.
+        </p>
+        </div>
+
+        <div class="dcol">
+        <p class="sub">recent incidents</p>
+        <div id="dIncidents" class="list"><p class="none">none yet</p></div>
+
+        <p class="sub">probes it has sent</p>
+        <div id="dProbes" class="list"><p class="none">loading…</p></div>
+        </div>
+
       </div>
     </div>
-    <dl class="forecast">
-      <div>
-        <dt>Risk next 5 min</dt>
-        <dd><span id="risk5">--</span><div class="meter"><i id="risk5Bar"></i></div></dd>
-      </div>
-      <div>
-        <dt>Risk next 15 min</dt>
-        <dd><span id="risk15">--</span><div class="meter"><i id="risk15Bar"></i></div></dd>
-      </div>
-      <div>
-        <dt>Signals covered</dt>
-        <dd><span id="coverage">--</span></dd>
-      </div>
-    </dl>
   </section>
 
-  <section class="panel" aria-labelledby="whatsUpHeading">
-    <h2 id="whatsUpHeading">What is going on</h2>
-    <div id="incidentCard" class="incident">
-      <p class="muted">Waiting for the first health reading.</p>
-    </div>
-    <div class="feedback">
-      <span id="feedbackPrompt">Was this right?</span>
-      <button type="button" class="btn btn-small" data-verdict="bad">It was bad</button>
-      <button type="button" class="btn btn-small" data-verdict="ok">It was fine</button>
-      <button type="button" class="btn btn-small" data-verdict="unsure">Not sure</button>
-      <span id="feedbackResult" class="muted" role="status"></span>
-    </div>
-  </section>
-
-  <section class="panel" aria-labelledby="timelineHeading">
-    <div class="panel-head">
-      <h2 id="timelineHeading">Last 24 hours</h2>
-      <label class="range">
-        Window
-        <select id="rangeSelect">
-          <option value="1">1 hour</option>
-          <option value="6">6 hours</option>
-          <option value="24" selected>24 hours</option>
-          <option value="168">7 days</option>
-        </select>
-      </label>
-    </div>
-    <div class="chart-wrap">
-      <svg id="chart" viewBox="0 0 800 180" preserveAspectRatio="none" role="img"
-           aria-labelledby="chartDesc"></svg>
-      <p id="chartDesc" class="sr-only">Health score over the selected window, with incidents marked.</p>
-    </div>
-    <p id="chartSummary" class="muted"></p>
-  </section>
-
-  <section class="panel" aria-labelledby="layersHeading">
-    <h2 id="layersHeading">Where the agent is looking</h2>
-    <ul id="layerList" class="layers"></ul>
-  </section>
-
-  <section class="panel" aria-labelledby="incidentsHeading">
-    <h2 id="incidentsHeading">Recent incidents</h2>
-    <ul id="incidentList" class="incidents"><li class="muted">None yet.</li></ul>
-  </section>
-
-  <section class="panel" aria-labelledby="probesHeading">
-    <div class="panel-head">
-      <h2 id="probesHeading">Probe log</h2>
-      <button id="probesToggle" type="button" class="btn btn-small" aria-expanded="false"
-              aria-controls="probeTableWrap">Show</button>
-    </div>
-    <p class="muted">Every packet this agent sends is listed here, with where it went.</p>
-    <div id="probeTableWrap" hidden>
-      <table class="probes">
-        <thead><tr><th scope="col">Time</th><th scope="col">Collector</th>
-          <th scope="col">Target</th><th scope="col">Result</th><th scope="col">ms</th></tr></thead>
-        <tbody id="probeBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="panel" aria-labelledby="privacyHeading">
-    <h2 id="privacyHeading">Privacy centre</h2>
-    <p>Everything measured stays on this machine. No packet contents are ever captured,
-       and nothing is uploaded.</p>
-    <ul id="privacyFacts" class="facts"></ul>
-    <div class="actions">
-      <button id="exportBtn" type="button" class="btn">Export diagnostic bundle</button>
-      <button id="learningBtn" type="button" class="btn" aria-pressed="false">Pause learning</button>
-      <button id="wipeBtn" type="button" class="btn btn-danger">Delete all stored data</button>
-    </div>
-    <p id="privacyResult" class="muted" role="status"></p>
-  </section>
-
-  <section class="panel" aria-labelledby="capHeading">
-    <div class="panel-head">
-      <h2 id="capHeading">What this machine can measure</h2>
-      <button id="capToggle" type="button" class="btn btn-small" aria-expanded="false"
-              aria-controls="capList">Show</button>
-    </div>
-    <ul id="capList" class="caps" hidden></ul>
-  </section>
-
+  <p class="offstage" id="offstage" hidden></p>
 </main>
 
-<footer class="foot">
-  <span id="versionLabel">NetPulse Local</span>
-  <span class="muted">Predictions are estimates. Never treat a layer attribution as proof.</span>
-</footer>
-
-<script>window.NETPULSE_TOKEN = "__NETPULSE_TOKEN__";</script>
 <script src="/static/app.js"></script>
 </body>
 </html>
