@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import zipfile
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+import netpulse
 from netpulse import paths
 from netpulse.api.server import TOKEN_HEADER, _is_loopback_host, create_app, load_or_create_token
 from netpulse.cli import build_parser, main
@@ -780,3 +782,43 @@ def test_cli_demo_list(capsys):
     out = capsys.readouterr().out
     assert "wifi_fade" in out
     assert "captive_portal" in out
+
+
+# ------------------------------------------------------------------ the UI
+
+
+def test_served_page_defines_a_usable_token(client):
+    """The placeholder must not appear in the variable name it is assigned to.
+
+    The server substitutes every occurrence of the placeholder in the page. A
+    variable called __NETPULSE_TOKEN__ holding "__NETPULSE_TOKEN__" therefore
+    got renamed along with its value, the page read undefined, and every call
+    came back 401 while the panel showed "not connected".
+    """
+    body = client.get("/").text
+    assert "__NETPULSE_TOKEN__" not in body, "the placeholder was left unsubstituted"
+
+    match = re.search(r"window\.([A-Za-z_$][\w$]*)\s*=\s*\"([^\"]+)\"", body)
+    assert match, "the page does not assign a token to a window property"
+    name, value = match.group(1), match.group(2)
+    assert name == "NETPULSE_TOKEN", f"unexpected token variable name {name!r}"
+    assert value and value != "NETPULSE_TOKEN"
+
+    # The name the page reads must be the name the server wrote.
+    app_js = (Path(netpulse.__file__).parent / "api" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert f"window.{name}" in app_js
+
+
+def test_ui_only_offers_advice_for_a_current_problem():
+    """Advice under "your network looks healthy" reads as a contradiction.
+
+    An incident can still be open while the score has already recovered, so
+    the page gates the remediation list on the current severity.
+    """
+    app_js = (Path(netpulse.__file__).parent / "api" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert 'd.severity === "watch"' in app_js
+    assert "d.warming_up || d.paused" in app_js

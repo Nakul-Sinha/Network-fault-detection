@@ -1,230 +1,285 @@
-/* NetPulse Local UI.
-   A utility, not a landing page (PRD 11.3): plain type, clear state colour,
-   and nothing that moves unless the data moved. Colours are defined as
-   tokens on :root and redefined for dark, so the page follows the system
-   setting without a second stylesheet. */
+/* NetPulse Local, the agent's own dashboard.
+   One panel, centred, holding a plain-English answer. Everything a normal
+   person does not need is behind a single toggle, because the common case is
+   someone glancing at this to find out whether their call is about to drop. */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #d9dee5;
-  --text: #171a1f;
-  --text-muted: #5b6673;
+  --void: #050506;
+  --glass: #0b0b0d;
+  --glass-2: #101013;
+  --edge: rgba(255, 255, 255, 0.09);
+  --edge-soft: rgba(255, 255, 255, 0.05);
 
-  --healthy: #1f7a4d;
-  --healthy-bg: #e4f4ec;
-  --watch: #8a6116;
-  --watch-bg: #fbf1dc;
-  --risk: #a4530f;
-  --risk-bg: #fbe9da;
-  --critical: #a32020;
-  --critical-bg: #fbe3e3;
-  --accent: #245ea8;
+  --fg: #eceef2;
+  --fg-dim: #9298a5;
+  --fg-faint: #5b616e;
 
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-}
+  --ok: #4ade80;
+  --watch: #e3b341;
+  --risk: #f0883e;
+  --bad: #f85149;
+  --idle: #6e7681;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171c;
-    --surface: #1b1f26;
-    --surface-2: #232830;
-    --border: #333a45;
-    --text: #e8ecf1;
-    --text-muted: #9aa5b3;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
 
-    --healthy: #58cc95;
-    --healthy-bg: #14342a;
-    --watch: #e0b661;
-    --watch-bg: #37301c;
-    --risk: #f0a26a;
-    --risk-bg: #3b2a1c;
-    --critical: #f08a8a;
-    --critical-bg: #3a2022;
-    --accent: #79aef0;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  }
+  /* One margin, used on every side, so the panel sits in an even frame. */
+  --frame: 26px;
 }
 
 * { box-sizing: border-box; }
-
-/* A class that sets `display` outbids the user-agent rule for [hidden], so
-   an element toggled with `el.hidden = true` stays on screen. This bit both
-   the warm-up chip here and the capability list in the agent UI. */
 [hidden] { display: none !important; }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+html, body { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--void);
+  color: var(--fg);
+  font: 15px/1.6 var(--mono);
+  -webkit-font-smoothing: antialiased;
 }
 
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+/* A single soft pool of light behind the panel. It is what makes the black
+   read as polished rather than flat. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 50% -8%, rgba(120, 150, 255, 0.07), transparent 70%),
+    radial-gradient(700px 500px at 50% 108%, rgba(74, 222, 128, 0.045), transparent 70%);
 }
 
-.skip {
-  position: absolute; left: -9999px; top: 0; z-index: 10;
-  background: var(--surface); color: var(--text); padding: 10px 14px;
-}
-.skip:focus { left: 8px; top: 8px; }
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.stage {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--frame);
 }
 
-/* ---------------------------------------------------------------- layout */
+/* ------------------------------------------------------------ the panel */
 
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
-  padding: 14px 20px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 5;
-}
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand h1 { font-size: 16px; margin: 0; letter-spacing: 0.01em; }
-.topbar-actions { display: flex; align-items: center; gap: 12px; }
-
-.dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--text-muted); flex: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
-}
-.dot.healthy { background: var(--healthy); color: var(--healthy); }
-.dot.watch { background: var(--watch); color: var(--watch); }
-.dot.risk { background: var(--risk); color: var(--risk); }
-.dot.critical { background: var(--critical); color: var(--critical); }
-
-main {
-  max-width: 980px; margin: 0 auto; padding: 20px;
-  display: grid; gap: 16px;
+.glass {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--frame) * 2);
+  background: linear-gradient(180deg, var(--glass-2) 0%, var(--glass) 42%);
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.07) inset,
+    0 30px 80px -20px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 18px 20px;
+/* The shine: a narrow highlight across the top edge, plus a very faint sheen
+   falling across the upper third. Both stay under 8% so the panel looks
+   polished rather than lit. */
+.glass::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
 }
-.panel h2 { font-size: 14px; margin: 0 0 12px; text-transform: none; letter-spacing: 0.01em; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.panel-head h2 { margin-bottom: 12px; }
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 45%;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
+}
 
-.muted { color: var(--text-muted); font-size: 13px; }
+.bar {
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--edge-soft);
+  font-size: 12px; color: var(--fg-faint);
+}
+.dots { display: flex; gap: 6px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; display: block; opacity: .85; }
+.dots i:nth-child(1) { background: #ff5f57; }
+.dots i:nth-child(2) { background: #febc2e; }
+.dots i:nth-child(3) { background: #28c840; }
+.bar-title { flex: 1; text-align: center; color: var(--fg-dim); letter-spacing: .04em; }
+.bar-state { display: inline-flex; align-items: center; gap: 7px; }
+.pulse {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--idle);
+  box-shadow: 0 0 0 0 currentColor;
+}
+.pulse.live { background: var(--ok); animation: breathe 2.6s ease-in-out infinite; }
+.pulse.warn { background: var(--watch); }
+.pulse.bad { background: var(--bad); animation: breathe 1.3s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
-/* ----------------------------------------------------------------- score */
+.body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 46px 52px 28px;
+}
+@media (max-width: 700px) { .body { padding: 30px 22px 22px; } }
 
-.score-panel {
-  display: grid; gap: 20px;
-  grid-template-columns: minmax(180px, auto) 1fr;
+/* The answer on the left, what to do about it on the right. Letting one
+   column of prose run the width of a 27 inch display would be worse than the
+   narrow card this replaced. */
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 20px 64px;
+  /* Centred rather than top-aligned. The healthy state is deliberately almost
+     empty, and pinned to the top of a full-height panel it looked unfinished
+     rather than calm. */
+  align-content: center;
   align-items: center;
 }
-@media (max-width: 640px) { .score-panel { grid-template-columns: 1fr; } }
-
-.score-number { font-size: 56px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.score-max { font-size: 18px; color: var(--text-muted); font-weight: 400; margin-left: 4px; }
-.score-meta { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-
-.chip {
-  display: inline-block; padding: 3px 10px; border-radius: 999px;
-  font-size: 12px; font-weight: 600;
-  background: var(--surface-2); color: var(--text-muted);
-  border: 1px solid var(--border);
+.lead { min-width: 0; max-width: 62ch; }
+.side { min-width: 0; }
+@media (max-width: 900px) {
+  .main { grid-template-columns: minmax(0, 1fr); gap: 4px; align-content: start; }
+  .lead { max-width: none; }
+  .todo { margin-top: 22px; }
 }
-.chip.healthy { background: var(--healthy-bg); color: var(--healthy); border-color: transparent; }
-.chip.watch { background: var(--watch-bg); color: var(--watch); border-color: transparent; }
-.chip.risk { background: var(--risk-bg); color: var(--risk); border-color: transparent; }
-.chip.critical { background: var(--critical-bg); color: var(--critical); border-color: transparent; }
-.chip-quiet { font-weight: 400; }
 
-.forecast { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); margin: 0; }
-@media (max-width: 520px) { .forecast { grid-template-columns: 1fr; } }
-.forecast dt { font-size: 12px; color: var(--text-muted); }
-.forecast dd { margin: 4px 0 0; font-size: 20px; font-variant-numeric: tabular-nums; }
+/* ----------------------------------------------------------- the answer */
 
-.meter { height: 6px; border-radius: 3px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
-.meter i { display: block; height: 100%; width: 0; background: var(--healthy); transition: width .4s ease, background-color .4s ease; }
-.meter i.watch { background: var(--watch); }
-.meter i.risk { background: var(--risk); }
-.meter i.critical { background: var(--critical); }
-
-/* -------------------------------------------------------------- incident */
-
-.incident h3 { margin: 0 0 6px; font-size: 16px; }
-.incident p { margin: 0 0 10px; }
-.incident .evidence { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; padding: 0; list-style: none; }
-.incident .evidence li {
-  font-size: 12px; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 4px 9px; font-family: var(--mono);
+.eyebrow {
+  margin: 0 0 10px; font-size: 11px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--fg-faint);
 }
-.incident ol { margin: 8px 0 0; padding-left: 20px; }
-.incident ol li { margin-bottom: 4px; }
-
-.feedback { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px;
-  padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; }
-
-/* ---------------------------------------------------------------- charts */
-
-.chart-wrap { background: var(--surface-2); border-radius: 8px; padding: 8px; }
-#chart { width: 100%; height: 180px; display: block; }
-.range { font-size: 13px; color: var(--text-muted); display: flex; gap: 6px; align-items: center; }
-select, .btn {
-  font: inherit; font-size: 13px; color: var(--text);
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 7px; padding: 6px 12px; cursor: pointer;
+.verdict {
+  margin: 0 0 12px;
+  font-size: clamp(25px, 4.6vw, 35px);
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--fg);
 }
-.btn:hover { background: var(--border); }
-.btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-small { padding: 4px 10px; font-size: 12px; }
-.btn-danger { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 40%, var(--border)); }
+.verdict.ok { color: var(--ok); }
+.verdict.watch { color: var(--watch); }
+.verdict.risk { color: var(--risk); }
+.verdict.bad { color: var(--bad); }
 
-/* ---------------------------------------------------------------- lists */
+.because {
+  margin: 0 0 4px; color: var(--fg-dim); font-size: 15px; max-width: 54ch;
+}
 
-.layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.layers li { display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: center; font-size: 13px; }
-.layers .bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
-.layers .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s ease; }
-.layers .off { color: var(--text-muted); }
+/* --------------------------------------------------------------- to do */
 
-.incidents { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.incidents li { border-left: 3px solid var(--border); padding: 6px 0 6px 12px; }
-.incidents li.risk { border-left-color: var(--risk); }
-.incidents li.critical { border-left-color: var(--critical); }
-.incidents li.watch { border-left-color: var(--watch); }
-.incidents .when { font-size: 12px; color: var(--text-muted); }
+.todo {
+  margin: 0; padding: 16px 18px;
+  border: 1px solid var(--edge-soft); border-radius: 12px;
+  background: rgba(255, 255, 255, 0.022);
+}
+.todo-head {
+  margin: 0 0 8px; font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--fg-faint);
+}
+.todo ol { margin: 0; padding-left: 20px; color: var(--fg); }
+.todo li { margin-bottom: 6px; }
+.todo li::marker { color: var(--fg-faint); }
 
-.probes { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--mono); }
-.probes th, .probes td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
-.probes th { color: var(--text-muted); font-weight: 600; }
-.probes .fail { color: var(--critical); }
-#probeTableWrap { max-height: 320px; overflow: auto; margin-top: 10px; }
+/* --------------------------------------------------------------- trend */
 
-.facts { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
-.facts li::before { content: "•"; color: var(--text-muted); margin-right: 8px; }
+.trend { margin: 34px 0 0; }
+.spark {
+  margin: 0; font-family: var(--mono); font-size: 13px; line-height: 1.05;
+  letter-spacing: 0; white-space: pre; overflow: hidden; color: var(--ok);
+}
+.spark .w { color: var(--watch); }
+.spark .r { color: var(--bad); }
+.spark .n { color: #23252b; }
+.trend-note {
+  margin: 8px 0 0; font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--fg-faint);
+}
 
-.caps { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
-.caps .no { color: var(--text-muted); }
-
-.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+/* ---------------------------------------------------------------- foot */
 
 .foot {
-  max-width: 980px; margin: 0 auto; padding: 8px 20px 28px;
-  display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap;
-  font-size: 12px; color: var(--text-muted);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 32px; padding-top: 16px;
+  border-top: 1px solid var(--edge-soft);
+}
+.updated { font-size: 11px; color: var(--fg-faint); }
+
+.ghost {
+  font: inherit; font-size: 12px; cursor: pointer;
+  background: transparent; color: var(--fg-dim);
+  border: 1px solid var(--edge-soft); border-radius: 8px;
+  padding: 6px 13px;
+  transition: color .15s, border-color .15s, background-color .15s;
+}
+.ghost:hover { color: var(--fg); border-color: var(--edge); background: rgba(255,255,255,.03); }
+.ghost.danger:hover { color: var(--bad); border-color: rgba(248, 81, 73, .4); }
+.ghost[aria-expanded="true"] { color: var(--fg); }
+:focus-visible { outline: 2px solid rgba(120, 150, 255, .55); outline-offset: 2px; }
+
+/* -------------------------------------------------------------- details */
+
+.details {
+  margin-top: 22px; padding-top: 20px;
+  border-top: 1px solid var(--edge-soft);
+  animation: reveal .22s ease-out;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 6px 56px;
+  align-items: start;
+}
+.dcol { min-width: 0; }
+.dcol > .sub:first-child { margin-top: 0; }
+@keyframes reveal { from { opacity: 0; transform: translateY(-4px); } }
+
+.row {
+  display: flex; justify-content: space-between; gap: 14px;
+  padding: 5px 0; font-size: 13px;
+}
+.row .k { color: var(--fg-faint); }
+.row .v { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+.sub {
+  margin: 22px 0 8px; font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--fg-faint);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+.layers {
+  margin: 0; font-size: 12px; line-height: 1.7; white-space: pre;
+  overflow-x: auto; color: var(--fg-dim);
+}
+.layers .hot { color: var(--bad); }
+.layers .mid { color: var(--watch); }
+.layers .cool { color: #2b2e36; }
+.layers .name { color: var(--fg-dim); }
+
+.list { font-size: 13px; color: var(--fg-dim); }
+.list .item {
+  padding: 8px 0; border-bottom: 1px solid var(--edge-soft);
+}
+.list .item:last-child { border-bottom: 0; }
+.list .when { color: var(--fg-faint); font-size: 11px; }
+.list .none { color: var(--fg-faint); margin: 0; }
+.list .ok { color: var(--ok); }
+.list .fail { color: var(--bad); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { margin: 10px 0 0; font-size: 12px; color: var(--fg-faint); max-width: 60ch; }
+
+.offstage {
+  margin: 18px 0 0; font-size: 12px; color: var(--fg-faint); text-align: center;
 }
