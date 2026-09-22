@@ -139,6 +139,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     if args.headless:
         config = config.model_copy(update={"headless": True})
+    config = _with_port(config, args.port)
     write_default_config()
 
     agent = Agent(config)
@@ -543,7 +544,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
     from .api.server import serve, ui_url
     from .core.agent import Agent
 
-    config = demo_config(load_config(args.config))
+    config = _with_port(demo_config(load_config(args.config)), args.port)
     agent = Agent(config)
     serve_ui = config.api.enabled and not args.no_api
     # The demo narrates itself; agent log lines would interleave with the
@@ -606,6 +607,13 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _with_port(config: NetPulseConfig, port: int | None) -> NetPulseConfig:
+    """Override the UI port, so running two agents side by side is one flag."""
+    if port is None:
+        return config
+    return config.model_copy(update={"api": config.api.model_copy(update={"port": port})})
+
+
 def _sparkbar(health: float, width: int = 22) -> str:
     filled = int(max(0.0, min(100.0, health)) / 100 * width)
     return "[" + "#" * filled + "." * (width - filled) + "]"
@@ -653,6 +661,7 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="run the agent and the local web UI", parents=[common])
     run.add_argument("--headless", action="store_true", help="server mode, no browser prompt")
     run.add_argument("--no-api", action="store_true", help="do not serve the web UI")
+    run.add_argument("--port", type=int, default=None, help="port for the web UI (default 8787)")
     run.set_defaults(func=cmd_run)
 
     status = subparsers.add_parser(
@@ -743,6 +752,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--speed", type=float, default=30.0, help="playback speed, default 30x")
     demo.add_argument("--loop", action="store_true", help="replay continuously")
     demo.add_argument("--no-api", action="store_true", help="terminal only, no web UI")
+    demo.add_argument("--port", type=int, default=None, help="port for the web UI (default 8787)")
     demo.add_argument("--list", action="store_true", help="list the scenarios and exit")
     demo.add_argument(
         "--keep",
