@@ -8,94 +8,90 @@
 <meta property="og:title" content="NetPulse Local">
 <meta property="og:description" content="Predicts network trouble minutes before you feel it, and tells you which layer is failing. Runs entirely on your machine.">
 <meta property="og:type" content="website">
+<meta name="theme-color" content="#070a07">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <a class="skip" href="#demo">Skip to the demo</a>
 
-<header class="site-head">
-  <div class="wrap head-inner">
-    <span class="logo">
-      <svg viewBox="0 0 32 32" aria-hidden="true" width="26" height="26">
-        <rect width="32" height="32" rx="7" fill="var(--accent)"/>
-        <path d="M3 20 L9 20 L12 10 L16 26 L20 14 L23 20 L29 20" fill="none"
-              stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <b>NetPulse Local</b>
+<div class="term">
+  <div class="term-bar">
+    <span class="dots"><i></i><i></i><i></i></span>
+    <span class="term-title">nakul@netpulse: ~/network-fault-detection — bash</span>
+    <span class="term-links">
+      <a href="https://github.com/Nakul-Sinha/Network-fault-detection">github</a>
+      <a href="#demo">demo</a>
+      <a href="#install">install</a>
     </span>
-    <nav>
-      <a href="#demo">Demo</a>
-      <a href="#how">How it works</a>
-      <a href="#privacy">Privacy</a>
-      <a href="#install">Install</a>
-      <a class="ghost" href="https://github.com/Nakul-Sinha/Network-fault-detection">GitHub</a>
-    </nav>
   </div>
-</header>
 
-<main>
+  <div class="term-body">
 
-  <section class="hero wrap">
-    <p class="eyebrow">Computer Networks lab project</p>
-    <h1>Your network tells you it is about to break.<br><span class="dim">Usually nothing is listening.</span></h1>
-    <p class="lede">
-      NetPulse Local watches Wi-Fi, your device, the router, DNS, the path out and the
-      services you reach, all at once and all on your own machine. It forecasts trouble
-      minutes before you feel it, then says which layer is failing in a sentence you can
-      act on.
+<pre class="banner" aria-label="NetPulse Local">  _   _      _   ____        _            _                    _
+ | \ | | ___| |_|  _ \ _   _| |___  ___  | |    ___   ___ __ _| |
+ |  \| |/ _ \ __| |_) | | | | / __|/ _ \ | |   / _ \ / __/ _` | |
+ | |\  |  __/ |_|  __/| |_| | \__ \  __/ | |__| (_) | (_| (_| | |
+ |_| \_|\___|\__|_|    \__,_|_|___/\___| |_____\___/ \___\__,_|_|</pre>
+
+    <p class="banner-sub">
+      predicts network trouble minutes before you feel it, names the failing layer,
+      and never sends anything off your machine · <b>v0.1.0</b> · Apache-2.0
     </p>
 
-    <div class="stats" role="list">
-      <!-- These four are filled from /data/index.json, which takes them from
-           the evaluation harness. The values here are only a fallback. -->
-      <div role="listitem"><b id="statLead">6.2 min</b><span>median warning before impact</span></div>
-      <div role="listitem"><b id="statDetect">100%</b><span>of injected faults detected</span></div>
-      <div role="listitem"><b id="statLayer">100%</b><span>named the right layer</span></div>
-      <div role="listitem"><b id="statBenign">0</b><span>false alarms per day when nothing is wrong</span></div>
-    </div>
+    <!-- ========================================================== ABOUT -->
+    <p class="prompt"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd">cat about.txt</span></p>
 
-    <div class="cta">
-      <code id="installCmd">pip install netpulse-local</code>
-      <button type="button" id="copyBtn" class="btn" data-copy="#installCmd">Copy</button>
-      <a class="btn btn-quiet" href="#demo">See it work</a>
-    </div>
-    <p class="fineprint">
-      Apache-2.0. Nothing it measures leaves your machine.
-      <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/evaluation.md">How these numbers are measured</a>
+    <p class="out">
+      A call freezes. A game lags. A page stalls. Nothing tells you whether it was
+      the Wi-Fi, DNS, your router or your internet provider, and most tools only
+      speak up <strong>after</strong> it already broke.
     </p>
-  </section>
+    <p class="out">
+      NetPulse Local watches seven layers at once on your own machine, forecasts
+      degradation <span class="hl">five to fifteen minutes ahead</span>, and explains
+      which layer is failing in a sentence you can act on.
+    </p>
 
-  <!-- ============================================================ DEMO -->
-  <section id="demo" class="wrap section">
-    <div class="section-head">
-      <h2>Watch it catch one</h2>
-      <p>
-        Every number below was produced by the actual scoring code, replaying the
-        fault-injection corpus the project is tested against. Pick a failure and
-        press play.
-      </p>
-    </div>
+    <!-- ========================================================== STATS -->
+    <p class="prompt"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd">netpulse eval <span class="flag">--gate</span></span></p>
+
+    <table class="stat-table">
+      <tbody>
+        <tr><td>median_lead_time</td><td id="statLead">6.2 min</td><td>[<span class="pass">PASS</span>] at least 5 min</td></tr>
+        <tr><td>detection_rate</td><td id="statDetect">100%</td><td>[<span class="pass">PASS</span>] at least 90%</td></tr>
+        <tr><td>layer_accuracy</td><td id="statLayer">100%</td><td>[<span class="pass">PASS</span>] at least 60%</td></tr>
+        <tr><td>benign_alerts_per_day</td><td id="statBenign">0</td><td>[<span class="pass">PASS</span>] at most 2/day</td></tr>
+      </tbody>
+    </table>
+    <p class="out" style="margin-top:10px">
+      <span class="dim">Measured against the fault-injection corpus. CI blocks a merge when any of
+      these regress. <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/evaluation.md">docs/evaluation.md</a>
+      has the method and the limits.</span>
+    </p>
+
+    <!-- =========================================================== DEMO -->
+    <p class="prompt" id="demo"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd">netpulse demo <span class="flag">--list</span></span></p>
 
     <div class="picker" role="tablist" aria-label="Scenario"></div>
 
-    <div class="scenario-note">
-      <h3 id="scenarioTitle">Loading…</h3>
-      <p id="scenarioDescription"></p>
-    </div>
+    <p class="prompt"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd" id="demoCmd">netpulse demo wifi_fade</span><span class="caret" aria-hidden="true"></span></p>
+
+    <p class="out" id="scenarioDescription">Loading the recordings…</p>
 
     <div class="player">
-      <button type="button" id="playBtn" class="btn btn-play" aria-label="Play">
-        <span class="icon-play" aria-hidden="true"></span><span id="playLabel">Play</span>
+      <button type="button" id="playBtn" class="btn-play" aria-label="Play">
+        <span id="playLabel">▶ play</span>
       </button>
       <!-- autocomplete off: browsers restore form state on reload and fire an
-           input event while doing it, which silently dragged the playhead to
-           wherever it was left last time. -->
+           input event while doing it, which silently dragged the playhead. -->
       <input type="range" id="scrub" min="0" max="100" value="0" step="1"
              autocomplete="off" aria-label="Position in the recording">
-      <span class="clock"><span id="clock">00:00</span></span>
-      <label class="speed">
-        Speed
+      <span class="clock" id="clock">00:00</span>
+      <label class="speed">speed
         <select id="speed" aria-label="Playback speed">
           <option value="1">1x</option>
           <option value="4" selected>4x</option>
@@ -105,82 +101,62 @@
       </label>
     </div>
 
-    <div class="board">
-
-      <div class="panel score-panel">
-        <div class="score">
-          <div class="score-value"><span id="health">--</span><small>/100</small></div>
-          <div class="chips">
-            <span id="sevChip" class="chip">starting</span>
-            <span id="warmChip" class="chip chip-quiet" hidden>learning your network</span>
-          </div>
-        </div>
-        <dl class="forecast">
-          <div><dt>Risk next 5 min</dt><dd><span id="r5">--</span><i class="meter"><b id="r5Bar"></b></i></dd></div>
-          <div><dt>Risk next 15 min</dt><dd><span id="r15">--</span><i class="meter"><b id="r15Bar"></b></i></dd></div>
-          <div><dt>Signals covered</dt><dd><span id="cov">--</span></dd></div>
-        </dl>
-      </div>
-
-      <div class="panel timeline-panel">
-        <div class="panel-head">
-          <h3>Health over the recording</h3>
-          <span id="leadBadge" class="lead-badge" hidden></span>
-        </div>
-        <div class="chart-holder">
-          <svg id="chart" viewBox="0 0 1000 240" preserveAspectRatio="none"
-               role="img" aria-describedby="chartDesc"></svg>
-          <p id="chartDesc" class="sr-only">
-            Health score across the recording, with the period of user-visible
-            degradation shaded and the moment the agent first warned marked.
-          </p>
-        </div>
-        <div class="legend">
-          <span><i class="swatch swatch-line"></i>Health score</span>
-          <span><i class="swatch swatch-alert"></i>First warning</span>
-          <span><i class="swatch swatch-impact"></i>When it actually broke</span>
-        </div>
-      </div>
-
-      <div class="panel card-panel">
-        <h3>What the agent says</h3>
-        <div id="incidentCard" class="incident">
-          <p class="muted">Press play to start the recording.</p>
-        </div>
-      </div>
-
-      <div class="panel layers-panel">
-        <h3>Where it is looking</h3>
-        <ul id="layerList" class="layers"></ul>
-        <p class="muted small">
-          Each layer's score is reduced by what the layers before it already explain,
-          so a slow router does not get every downstream layer blamed with it.
-        </p>
-      </div>
-
-      <div class="panel signals-panel">
-        <h3>Live signals</h3>
-        <ul id="signalList" class="signals"></ul>
-      </div>
-
+    <div class="panel">
+      <div class="panel-title">agent status</div>
+      <pre class="readout" id="readout">  waiting for a recording…</pre>
     </div>
-  </section>
 
-  <!-- ========================================================= HOW IT WORKS -->
-  <section id="how" class="wrap section">
-    <div class="section-head">
-      <h2>How it works</h2>
-      <p>
-        Five stages, deliberately boring at the bottom and only as clever as it needs
-        to be at the top.
+    <div class="panel">
+      <div class="panel-title">health over the recording<span id="leadFlag" class="lead-flag" hidden></span></div>
+      <div class="chart-wrap">
+        <pre class="chart" id="chart" role="img" aria-describedby="chartDesc"></pre>
+      </div>
+      <p id="chartDesc" class="sr-only">
+        Health score across the recording, with the moment the agent first warned
+        and the period of user-visible degradation both marked.
+      </p>
+      <p class="legend">
+        <b class="line">█</b> health &nbsp; <b class="warned">│</b> first warning &nbsp;
+        <b class="broke">│</b> when it actually broke &nbsp; <b>░</b> warming up
       </p>
     </div>
 
+    <div class="panel">
+      <div class="panel-title">layer attribution</div>
+      <pre class="readout" id="layers">  waiting…</pre>
+      <p class="legend" style="margin-top:10px">
+        Each layer's score is reduced by what the layers before it already explain,
+        so a slow router does not drag every downstream layer down with it.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">what the agent says</div>
+      <div id="incidentCard">
+        <p class="out">Press play to start the recording.</p>
+      </div>
+    </div>
+
+    <p class="out" style="margin-top:16px">
+      <span class="dim">Every number above was produced by
+      <strong>netpulse.ml.scorer.Scorer</strong> replaying the fault-injection corpus,
+      the same object an installed agent runs. It is a recording, not a mock, and
+      not a live measurement of your network.</span>
+    </p>
+
+    <!-- =================================================== HOW IT WORKS -->
+    <p class="prompt"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd">cat architecture.txt</span></p>
+
+    <p class="out">
+      Five stages, deliberately boring at the bottom and only as clever as it needs
+      to be at the top.
+    </p>
+
     <ol class="ladder">
       <li>
-        <span class="tier">L0</span>
+        <span class="tier">[L0]</span>
         <div>
-          <h3>Rules</h3>
+          <h3>rules</h3>
           <p>
             Gateway unreachable, DNS blackholed, a sign-in page intercepting everything.
             Also suppression: while a captive portal is up, no other layer may be blamed.
@@ -189,9 +165,9 @@
         </div>
       </li>
       <li>
-        <span class="tier">L1</span>
+        <span class="tier">[L1]</span>
         <div>
-          <h3>Seasonal statistics</h3>
+          <h3>seasonal statistics</h3>
           <p>
             Is this unusual <em>for this network, at this time of day</em>. Home networks
             have strong daily rhythms, so a single average would flag every weeknight.
@@ -201,9 +177,9 @@
         </div>
       </li>
       <li>
-        <span class="tier">L2</span>
+        <span class="tier">[L2]</span>
         <div>
-          <h3>Online autoencoders</h3>
+          <h3>online autoencoders</h3>
           <p>
             One small model per layer, trained continuously, no labels anywhere. Catches
             unusual <em>combinations</em> that per-feature statistics miss.
@@ -211,9 +187,9 @@
         </div>
       </li>
       <li>
-        <span class="tier">L3</span>
+        <span class="tier">[L3]</span>
         <div>
-          <h3>The forecast</h3>
+          <h3>the forecast</h3>
           <p>
             A calibrated logistic regression per horizon, weighted toward slopes rather
             than levels. A latency that is high and steady is one you have adapted to.
@@ -222,9 +198,9 @@
         </div>
       </li>
       <li>
-        <span class="tier">L4</span>
+        <span class="tier">[L4]</span>
         <div>
-          <h3>Attribution</h3>
+          <h3>attribution</h3>
           <p>
             Latency propagates outward, so ranking raw anomaly scores blames the far end
             for a Wi-Fi problem every time. Each layer's score is reduced by what its
@@ -233,105 +209,95 @@
         </div>
       </li>
     </ol>
-  </section>
 
-  <!-- ============================================================= PRIVACY -->
-  <section id="privacy" class="wrap section">
-    <div class="section-head">
-      <h2>The privacy claim is structural</h2>
-      <p>Not a policy you have to trust. A property of the schema you can check.</p>
-    </div>
+    <!-- ======================================================== PRIVACY -->
+    <p class="prompt"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd">sqlite3 netpulse.sqlite <span class="flag">".schema samples"</span></span></p>
 
-    <div class="split">
-      <div>
-        <pre class="terminal"><code>$ sqlite3 netpulse.sqlite ".schema samples"
-CREATE TABLE samples (
-  ts REAL PRIMARY KEY,
+<pre class="code-block">CREATE TABLE samples (
+  ts              REAL PRIMARY KEY,
   "wifi_rssi_dbm" REAL,
   "gw_rtt_ms"     REAL,
   "dns_p50_ms"    REAL,
+  "https_ttfb_ms" REAL,
   ...
-);</code></pre>
-      </div>
-      <div>
-        <p>
-          Every column is a number. There is nowhere to put a hostname, a URL or a
-          packet byte, so the agent could not store your browsing history if it tried.
-          A test asserts this against the live schema on every run.
-        </p>
-        <ul class="ticks">
-          <li>No packet capture, at any setting</li>
-          <li>Network names stored as a salted hash, never in the clear</li>
-          <li>Every probe it sends is written to a ledger you can read</li>
-          <li>No account, no telemetry, no cloud</li>
-          <li>One command deletes everything</li>
-        </ul>
-        <p class="muted small">
-          It is an active tool, so it does send probes: your router, your resolver, and
-          a short list of HTTPS endpoints you can change or switch off entirely. All of
-          it is listed in the
-          <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/privacy.md">privacy document</a>.
-        </p>
-      </div>
-    </div>
-  </section>
+);</pre>
 
-  <!-- ============================================================= INSTALL -->
-  <section id="install" class="wrap section">
-    <div class="section-head">
-      <h2>Run it on your own machine</h2>
-      <p>
-        This page is a recording. The real thing measures <em>your</em> network, which is
-        the only place this measurement means anything.
-      </p>
-    </div>
+    <p class="out">
+      Every column is a number. There is nowhere to put a hostname, a URL or a packet
+      byte, so the agent <strong>could not</strong> store your browsing history if it
+      tried. A test asserts this against the live schema on every run.
+    </p>
 
-    <pre class="terminal"><code>$ pip install netpulse-local
+    <ul class="bullets">
+      <li><b>No packet capture</b>, at any setting</li>
+      <li><b>Network names</b> stored as a salted hash, never in the clear</li>
+      <li><b>Every probe it sends</b> is written to a ledger you can read</li>
+      <li><b>No account</b>, no telemetry, no cloud</li>
+      <li><b>One command</b> deletes everything</li>
+    </ul>
 
-$ netpulse doctor        <span class="cmt"># what can this machine measure?</span>
-$ netpulse check         <span class="cmt"># one full round, then exit</span>
-$ netpulse run           <span class="cmt"># agent + web UI on 127.0.0.1:8787</span>
-$ netpulse demo          <span class="cmt"># replay a fault against the live UI</span></code></pre>
+    <p class="out">
+      <span class="dim">It is an active tool, so it does send probes: your router, your
+      resolver, and a short list of HTTPS endpoints you can change or switch off
+      entirely. All of it is listed in
+      <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/privacy.md">docs/privacy.md</a>.</span>
+    </p>
 
-    <div class="cards">
-      <a class="mini" href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/install.md">
-        <b>Install guide</b><span>Windows, macOS, Linux, Docker, and running it always</span>
+    <!-- ======================================================== INSTALL -->
+    <p class="prompt" id="install"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="cmd">pip install netpulse-local</span><button type="button" class="copy" data-copy="pip install netpulse-local">copy</button></p>
+
+<pre class="code-block"><span class="p">$</span> netpulse doctor              <span class="c"># what can this machine measure?</span>
+<span class="p">$</span> netpulse check               <span class="c"># one full round, then exit</span>
+<span class="p">$</span> netpulse run                 <span class="c"># agent + web UI on 127.0.0.1:8787</span>
+<span class="p">$</span> netpulse demo                <span class="c"># replay a fault against the live agent</span>
+<span class="p">$</span> netpulse demo --port 8788    <span class="c"># run a replay alongside the real agent</span></pre>
+
+    <p class="out">
+      <span class="dim">Standalone binaries for Windows, macOS and Linux need no Python
+      at all, and carry the recorded scenarios, so
+      <strong>netpulse demo</strong> works before you let it touch your network.
+      The container image is at <strong>ghcr.io/Nakul-Sinha/Network-fault-detection</strong>.</span>
+    </p>
+
+    <div class="links">
+      <a href="https://github.com/Nakul-Sinha/Network-fault-detection/releases/tag/v0.1.0">
+        <b>releases/v0.1.0</b><span>binaries, wheel, SBOM, checksums</span>
       </a>
-      <a class="mini" href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/architecture.md">
-        <b>Architecture</b><span>How it fits together, including what took several attempts</span>
+      <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/install.md">
+        <b>docs/install.md</b><span>every platform, and running it always</span>
       </a>
-      <a class="mini" href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/evaluation.md">
-        <b>Evaluation</b><span>The model card, and the limits of these numbers</span>
+      <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/docs/architecture.md">
+        <b>docs/architecture.md</b><span>how it fits together, and what took several attempts</span>
       </a>
-      <a class="mini" href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/Research.md">
-        <b>Research</b><span>The 18 papers this is built on</span>
+      <a href="https://github.com/Nakul-Sinha/Network-fault-detection/blob/main/Research.md">
+        <b>Research.md</b><span>the 18 papers this is built on</span>
       </a>
     </div>
 
-    <div class="honest">
-      <h3>What this is not</h3>
+    <div class="notice">
+      <h3>what this is not</h3>
       <p>
         Not an enterprise monitor, not an intrusion detector, not a packet capture tool.
         It has one vantage point, your machine, so it can say trouble appeared past your
-        router but it cannot prove whose fault that is. Every incident card is worded that
-        way, and always will be. The scenarios on this page are synthetic by necessity:
+        router but it cannot prove whose fault that is. Every incident card is worded
+        that way, and always will be. The scenarios above are synthetic by necessity:
         they say the system behaves correctly on faults of the kind it was designed for,
         not that it will behave this way on your network.
       </p>
     </div>
-  </section>
 
-</main>
+    <p class="prompt"><span class="user">visitor</span><span class="host">@netpulse</span>:<span class="path">~</span>$ <span class="caret" aria-hidden="true"></span></p>
 
-<footer class="site-foot">
-  <div class="wrap foot-inner">
-    <span>NetPulse Local · Apache-2.0 · built by Nakul Sinha</span>
-    <span class="muted">
-      Standing on Kitsune, Donut, Outage-Watch, PreFix, Sherlock, NetMedic and LEAF.
-      The contribution here is the composition, not a new algorithm.
-    </span>
+    <div class="term-foot">
+      <p>NetPulse Local · Apache-2.0 · built by Nakul Sinha · Computer Networks lab project</p>
+      <p>
+        Standing on Kitsune, Donut, Outage-Watch, PreFix, Sherlock, NetMedic and LEAF.
+        The contribution here is the composition, not a new algorithm.
+      </p>
+    </div>
+
   </div>
-</footer>
+</div>
 
 <script src="/app.js"></script>
 </body>

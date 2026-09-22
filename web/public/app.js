@@ -1,70 +1,75 @@
 /* NetPulse Local demo player.
  *
- * Plays back recordings produced by scripts/build_demo_data.py, which runs
- * the real Scorer over the real fault-injection corpus. Nothing here computes
- * a health score or decides a severity: it renders what the agent already
+ * Plays back recordings produced by scripts/build_demo_data.py, which runs the
+ * real Scorer over the real fault-injection corpus. Nothing here computes a
+ * health score or decides a severity: it renders what the agent already
  * concluded, frame by frame.
  *
- * The one visual worth the effort is the timeline. It draws the moment the
- * agent first warned and the period when things were actually bad, so the gap
- * between them is a thing you can see rather than a number you are told.
+ * Everything is drawn as terminal output, including the chart, which is built
+ * from block characters rather than SVG. That is not only a style choice: a
+ * monospace grid makes the gap between the moment the agent warned and the
+ * moment things broke something you can literally count across the line.
  */
 
 (function () {
   "use strict";
 
   var LAYERS = [
-    ["wifi", "Wi-Fi"],
-    ["os", "This device"],
-    ["dns", "DNS"],
-    ["gateway", "Your router"],
-    ["path", "Path to internet"],
-    ["remote_https", "Remote services"],
-    ["vpn", "VPN"]
+    ["wifi", "wifi"],
+    ["os", "device"],
+    ["dns", "dns"],
+    ["gateway", "router"],
+    ["path", "path"],
+    ["remote_https", "remote"],
+    ["vpn", "vpn"]
   ];
 
   var SIGNALS = [
-    ["wifi_rssi_dbm", "Wi-Fi signal", " dBm", -70],
-    ["wifi_tx_retry_rate", "Wi-Fi retries", "%", 15],
-    ["gw_rtt_ms", "Router round trip", " ms", 25],
-    ["gw_loss_rate", "Router loss", "%", 5],
-    ["dns_p50_ms", "Name lookup", " ms", 120],
-    ["dns_fail_rate", "Lookup failures", "%", 10],
-    ["path_rtt_ms", "Path latency", " ms", 90],
-    ["https_ttfb_ms", "Time to first byte", " ms", 300],
-    ["https_tls_ms", "TLS handshake", " ms", 200],
-    ["os_cpu_pct", "CPU", "%", 75],
-    ["os_retrans_rate", "TCP retransmits", "%", 5]
+    ["wifi_rssi_dbm", "wifi signal", "dBm", -70, true],
+    ["wifi_tx_retry_rate", "wifi retries", "%", 15],
+    ["gw_rtt_ms", "router rtt", "ms", 25],
+    ["gw_loss_rate", "router loss", "%", 5],
+    ["dns_p50_ms", "dns lookup", "ms", 120],
+    ["dns_fail_rate", "dns failures", "%", 10],
+    ["path_rtt_ms", "path rtt", "ms", 90],
+    ["https_ttfb_ms", "https ttfb", "ms", 300],
+    ["https_tls_ms", "tls handshake", "ms", 200],
+    ["os_cpu_pct", "cpu", "%", 75],
+    ["os_retrans_rate", "tcp retransmits", "%", 5]
   ];
 
   var SEVERITY = {
-    info: { cls: "ok", word: "healthy" },
-    watch: { cls: "watch", word: "watch" },
-    risk: { cls: "risk", word: "elevated risk" },
-    critical: { cls: "crit", word: "trouble now" }
+    info: { cls: "g", word: "healthy" },
+    watch: { cls: "a", word: "watch" },
+    risk: { cls: "a", word: "elevated risk" },
+    critical: { cls: "r", word: "trouble now" }
   };
 
+  // Eighth-blocks, for the sparkline.
+  var BLOCKS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
   var state = {
-    index: null,
     scenario: null,
     frame: 0,
     playing: false,
     speed: 4,
     timer: null,
-    cache: {}
+    cache: {},
+    width: 96
   };
 
   function el(id) { return document.getElementById(id); }
-  function text(id, value) { var n = el(id); if (n) n.textContent = value; }
+  function text(id, v) { var n = el(id); if (n) n.textContent = v; }
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function pad(s, n) { s = String(s); return s.length >= n ? s : s + " ".repeat(n - s.length); }
+  function padStart(s, n) { s = String(s); return s.length >= n ? s : " ".repeat(n - s.length) + s; }
   function pct(v) { return v === null || v === undefined ? "--" : Math.round(v * 100) + "%"; }
 
-  function mmss(seconds) {
-    var m = Math.floor(seconds / 60), s = Math.floor(seconds % 60);
+  function mmss(sec) {
+    var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
     return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-  }
-
-  function minutes(seconds) {
-    return (seconds / 60).toFixed(1).replace(/\.0$/, "") + " min";
   }
 
   /* ------------------------------------------------------------- loading */
@@ -73,10 +78,9 @@
     return fetch("/data/index.json")
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        state.index = data;
-        // Every headline figure comes from the recordings index, which takes
-        // them from the evaluation harness. Hard-coding them in the markup
-        // would let the page drift away from what the gate actually enforces.
+        // Every headline figure comes from the index, which takes them from the
+        // evaluation harness. Hard-coding them in the markup would let the page
+        // drift away from what the gate actually enforces.
         var s = data.stats || {};
         if (s.medianLeadLabel) text("statLead", s.medianLeadLabel);
         if (s.detectionRate !== undefined) text("statDetect", Math.round(s.detectionRate * 100) + "%");
@@ -85,12 +89,11 @@
           text("statBenign", s.benignAlertsPerDay === 0 ? "0" : s.benignAlertsPerDay.toFixed(1));
         }
         buildPicker(data.scenarios);
-        var first = data.scenarios.filter(function (s) { return !s.benign; })[0];
+        var first = data.scenarios.filter(function (x) { return !x.benign; })[0];
         return select((first || data.scenarios[0]).name);
       })
       .catch(function () {
-        text("scenarioTitle", "Could not load the recordings");
-        text("scenarioDescription", "Try reloading the page.");
+        text("scenarioDescription", "Could not load the recordings. Try reloading.");
       });
   }
 
@@ -98,15 +101,15 @@
     var picker = document.querySelector(".picker");
     picker.innerHTML = "";
     scenarios.forEach(function (s) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.setAttribute("role", "tab");
-      button.setAttribute("aria-selected", "false");
-      button.className = s.benign ? "benign" : "fault";
-      button.textContent = s.title;
-      button.dataset.name = s.name;
-      button.addEventListener("click", function () { select(s.name); });
-      picker.appendChild(button);
+      var b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", "false");
+      b.textContent = s.name;
+      b.dataset.name = s.name;
+      b.title = s.title;
+      b.addEventListener("click", function () { select(s.name); });
+      picker.appendChild(b);
     });
   }
 
@@ -119,17 +122,16 @@
     var loaded = state.cache[name]
       ? Promise.resolve(state.cache[name])
       : fetch("/data/" + name + ".json").then(function (r) { return r.json(); })
-          .then(function (data) { state.cache[name] = data; return data; });
+          .then(function (d) { state.cache[name] = d; return d; });
 
     return loaded.then(function (data) {
       state.scenario = data;
       // Start just before the agent is warm. Watching a model warm up is not
       // interesting, and scoring during warm-up would not be honest anyway.
       state.frame = Math.max(0, (data.warmFrom || 0) - 4);
-      text("scenarioTitle", data.title);
+      text("demoCmd", "netpulse demo " + data.name);
       text("scenarioDescription", data.description);
       el("scrub").max = String(data.frames.length - 1);
-      drawChart();
       render();
     });
   }
@@ -145,32 +147,199 @@
     el("scrub").value = String(state.frame);
     text("clock", mmss(f.t));
 
-    text("health", f.h === null ? "--" : Math.round(f.h));
-    var sev = SEVERITY[f.sev] || SEVERITY.info;
-    var chip = el("sevChip");
-    chip.textContent = f.warm ? "learning" : sev.word;
-    chip.className = "chip " + (f.warm ? "" : sev.cls);
-    el("warmChip").hidden = !f.warm;
-
-    text("r5", pct(f.r5));
-    text("r15", pct(f.r15));
-    text("cov", pct(f.cov));
-    meter("r5Bar", f.r5);
-    meter("r15Bar", f.r15);
-
+    renderReadout(f, data);
+    renderChart(data);
+    renderLayers(f);
     renderCard(f, data);
-    renderLayers(f, data);
-    renderSignals(f);
-    movePlayhead();
-    updateLeadBadge(data);
+    renderLeadFlag(data);
   }
 
-  function meter(id, value) {
-    var n = el(id);
-    var v = Math.max(0, Math.min(1, value || 0));
-    n.style.width = (v * 100) + "%";
-    n.className = v >= 0.75 ? "crit" : v >= 0.5 ? "risk" : v >= 0.25 ? "watch" : "";
+  function bar(value, width) {
+    var filled = Math.round(Math.max(0, Math.min(1, value)) * width);
+    return "█".repeat(filled) + "░".repeat(width - filled);
   }
+
+  function riskClass(v) { return v >= 0.75 ? "r" : v >= 0.5 ? "a" : v >= 0.25 ? "a" : "g"; }
+
+  function renderReadout(f, data) {
+    var sev = SEVERITY[f.sev] || SEVERITY.info;
+    var health = f.h === null ? 0 : f.h;
+    var hClass = health >= 70 ? "g" : health >= 35 ? "a" : "r";
+    var w = state.width > 70 ? 28 : 18;
+
+    var lines = [];
+    lines.push(
+      "  " + span("k", pad("health", 18)) +
+      span(hClass, padStart(Math.round(health), 3) + "/100 ") +
+      span(hClass, bar(health / 100, w)) + "  " +
+      span(f.warm ? "dim" : sev.cls, f.warm ? "learning baselines" : sev.word)
+    );
+    lines.push(
+      "  " + span("k", pad("risk in 5 min", 18)) +
+      span(riskClass(f.r5 || 0), padStart(pct(f.r5), 3) + "      ") +
+      span(riskClass(f.r5 || 0), bar(f.r5 || 0, w))
+    );
+    lines.push(
+      "  " + span("k", pad("risk in 15 min", 18)) +
+      span(riskClass(f.r15 || 0), padStart(pct(f.r15), 3) + "      ") +
+      span(riskClass(f.r15 || 0), bar(f.r15 || 0, w))
+    );
+    lines.push(
+      "  " + span("k", pad("signals covered", 18)) +
+      span("c", padStart(pct(f.cov), 3)) +
+      span("dim", "      t+" + mmss(f.t) + " of " +
+        mmss(data.frames[data.frames.length - 1].t))
+    );
+    lines.push("");
+
+    // Live signal values, two per row where the terminal is wide enough.
+    var vals = f.v || {};
+    var cells = [];
+    SIGNALS.forEach(function (s) {
+      var key = s[0], label = s[1], unit = s[2], threshold = s[3], lowerIsWorse = s[4];
+      if (vals[key] === undefined) return;
+      var v = vals[key];
+      var hot = lowerIsWorse ? v <= threshold : v >= threshold;
+      cells.push(
+        span("k", pad(label, 17)) + span(hot ? "r" : "v", padStart(v + unit, 9))
+      );
+    });
+    var perRow = state.width > 74 ? 2 : 1;
+    for (var i = 0; i < cells.length; i += perRow) {
+      lines.push("  " + cells.slice(i, i + perRow).join("     "));
+    }
+
+    el("readout").innerHTML = lines.join("\n");
+  }
+
+  function span(cls, s) { return '<span class="' + cls + '">' + esc(s) + "</span>"; }
+
+  /* ----------------------------------------------------------- the chart */
+
+  function renderChart(data) {
+    var frames = data.frames;
+    var cols = Math.max(40, Math.min(state.width, 110));
+    var rows = 12;
+
+    // Downsample the recording onto the character grid, keeping the worst
+    // health in each column so a brief collapse is never averaged away.
+    var buckets = [];
+    for (var c = 0; c < cols; c++) {
+      var lo = Math.floor((c / cols) * frames.length);
+      var hi = Math.max(lo + 1, Math.floor(((c + 1) / cols) * frames.length));
+      var worst = 100;
+      for (var i = lo; i < hi && i < frames.length; i++) {
+        if (frames[i].h !== null && frames[i].h < worst) worst = frames[i].h;
+      }
+      buckets.push(worst);
+    }
+
+    var toCol = function (frameIndex) {
+      return Math.max(0, Math.min(cols - 1, Math.floor((frameIndex / frames.length) * cols)));
+    };
+    var warnCol = data.alertIndex !== null && data.alertIndex !== undefined ? toCol(data.alertIndex) : -1;
+    var brokeCol = data.impactIndex !== null && data.impactIndex !== undefined ? toCol(data.impactIndex) : -1;
+    var warmCol = data.warmFrom ? toCol(data.warmFrom) : -1;
+    var headCol = toCol(state.frame);
+
+    var out = [];
+    for (var r = rows - 1; r >= 0; r--) {
+      var floor = (r / rows) * 100;
+      var ceil = ((r + 1) / rows) * 100;
+      var label = r === rows - 1 ? "100 " : r === 0 ? "  0 " : r === Math.floor(rows / 2) ? " 50 " : "    ";
+      var line = span("axis", label) + span("axis", "│");
+      for (var c2 = 0; c2 < cols; c2++) {
+        var h = buckets[c2];
+        var ch = " ";
+        // Colour by the health value at that column, never by which region it
+        // falls in. Shading the bars red across the impact window painted the
+        // recovery at the end of every recording as a failure.
+        var cls = h >= 70 ? "" : h >= 35 ? "warned" : "broke";
+
+        if (h >= ceil) {
+          ch = "█";
+        } else if (h > floor) {
+          var eighth = Math.floor(((h - floor) / (ceil - floor)) * 8) - 1;
+          ch = BLOCKS[Math.max(0, Math.min(7, eighth))];
+        } else {
+          // Nothing drawn here. Only the warm-up run is shaded: an earlier
+          // version shaded everything from the moment things broke to the end
+          // of the recording, which painted the recovery red and made a
+          // successful recovery look like a continuing failure.
+          cls = "";
+          if (warmCol > 0 && c2 < warmCol) { ch = "·"; cls = "warm"; }
+        }
+
+        // Two markers drawn over everything, because the distance between
+        // them is the whole point of this chart.
+        if (c2 === warnCol) { ch = ch === " " ? "│" : ch; cls = "warned"; }
+        else if (c2 === brokeCol) { ch = ch === " " ? "│" : ch; cls = "broke"; }
+
+        line += cls ? span(cls, ch) : esc(ch);
+      }
+      out.push(line);
+    }
+
+    out.push(span("axis", "    └" + "─".repeat(cols)));
+
+    // Marker row: where the agent warned, where it broke, and the gap between.
+    var marks = new Array(cols).fill(" ");
+    if (warnCol >= 0) marks[warnCol] = "▲";
+    if (brokeCol >= 0) marks[brokeCol] = "▲";
+    if (headCol >= 0) marks[headCol] = marks[headCol] === " " ? "^" : marks[headCol];
+    var markLine = "     ";
+    for (var c3 = 0; c3 < cols; c3++) {
+      var m = marks[c3];
+      if (m === "▲" && c3 === warnCol) markLine += span("warned", m);
+      else if (m === "▲") markLine += span("broke", m);
+      else if (m === "^") markLine += span("axis", m);
+      else markLine += " ";
+    }
+    out.push(markLine);
+
+    if (warnCol >= 0 && brokeCol > warnCol) {
+      var gap = brokeCol - warnCol;
+      var label2 = data.leadSeconds ? (data.leadSeconds / 60).toFixed(1).replace(/\.0$/, "") + " min early" : "";
+      var line2 = "     " + " ".repeat(warnCol) + span("warned", "└");
+      if (gap > label2.length + 2) {
+        var left = Math.floor((gap - label2.length - 1) / 2);
+        line2 += span("warned", "─".repeat(left) + " " + label2 + " " +
+          "─".repeat(Math.max(0, gap - left - label2.length - 3)) + "┘");
+      } else {
+        line2 += span("warned", "─".repeat(Math.max(0, gap - 1)) + "┘ " + label2);
+      }
+      out.push(line2);
+    } else if (data.benign) {
+      out.push("     " + span("axis", "no alert raised across the whole recording"));
+    }
+
+    el("chart").innerHTML = out.join("\n");
+  }
+
+  /* ---------------------------------------------------------- attribution */
+
+  function renderLayers(f) {
+    var scores = f.layers || {};
+    var top = null, topValue = 0;
+    Object.keys(scores).forEach(function (k) {
+      if (scores[k] > topValue) { topValue = scores[k]; top = k; }
+    });
+
+    var w = state.width > 70 ? 34 : 20;
+    var lines = LAYERS.map(function (entry) {
+      var key = entry[0], label = entry[1];
+      var v = Math.max(0, Math.min(1, scores[key] || 0));
+      var isTop = key === top && topValue > 0.05;
+      var cls = isTop ? "r" : v > 0.3 ? "a" : v > 0.01 ? "g" : "dim";
+      return "  " + span(isTop ? "v" : "k", pad(label, 10)) +
+        span(cls, bar(v, w)) + "  " +
+        span(cls, v > 0.005 ? v.toFixed(2) : "  · ") +
+        (isTop ? span("r", "  ← primary") : "");
+    });
+    el("layers").innerHTML = lines.join("\n");
+  }
+
+  /* ----------------------------------------------------------- the card */
 
   function renderCard(f, data) {
     var host = el("incidentCard");
@@ -178,253 +347,55 @@
 
     if (!f.card) {
       var p = document.createElement("p");
-      p.className = "muted";
+      p.className = "out";
       p.textContent = f.warm
         ? "Still learning what normal looks like on this network."
-        : "Nothing unusual. The agent has nothing to say, which is most of the time.";
+        : "Nothing unusual. The agent has nothing to say, which is most of the time and is the hardest case to get right.";
       host.appendChild(p);
       return;
     }
 
+    var wrap = document.createElement("div");
+    wrap.className = "verdict " + (f.sev === "critical" ? "alert" : "warn");
+
     var h = document.createElement("h4");
-    h.textContent = f.card.title;
-    host.appendChild(h);
+    h.textContent = "! " + f.card.title;
+    wrap.appendChild(h);
 
     var summary = document.createElement("p");
     summary.textContent = f.card.summary;
-    host.appendChild(summary);
+    wrap.appendChild(summary);
 
     var meta = document.createElement("p");
     meta.className = "meta";
     var right = data.expectedLayer && f.card.layer === data.expectedLayer;
     meta.textContent =
-      "Likely " + (f.card.layerLabel || f.card.layer) +
-      " · confidence " + Math.round((f.card.confidence || 0) * 100) + "%" +
-      (data.expectedLayer ? (right ? " · correct layer" : " · expected " + data.expectedLayerLabel) : "");
-    host.appendChild(meta);
-
-    if (f.card.evidence && f.card.evidence.length) {
-      var ev = document.createElement("ul");
-      ev.className = "evidence";
-      f.card.evidence.forEach(function (item) {
-        var li = document.createElement("li");
-        li.textContent = item.label + ": " + item.value + (item.unit ? " " + item.unit : "");
-        li.title = item.comparison || "";
-        ev.appendChild(li);
-      });
-      host.appendChild(ev);
-    }
+      "layer=" + (f.card.layer || "?") +
+      "  confidence=" + Math.round((f.card.confidence || 0) * 100) + "%" +
+      (data.expectedLayer ? (right ? "  [correct layer]" : "  [expected " + data.expectedLayer + "]") : "");
+    wrap.appendChild(meta);
 
     if (f.card.remediation && f.card.remediation.length) {
-      var head = document.createElement("p");
-      head.className = "remedy-head";
-      head.textContent = "What to try";
-      host.appendChild(head);
       var ol = document.createElement("ol");
-      ol.className = "remedy";
       f.card.remediation.forEach(function (t) {
         var li = document.createElement("li");
         li.textContent = t;
         ol.appendChild(li);
       });
-      host.appendChild(ol);
+      wrap.appendChild(ol);
     }
+    host.appendChild(wrap);
   }
 
-  function renderLayers(f, data) {
-    var list = el("layerList");
-    list.innerHTML = "";
-    var scores = f.layers || {};
-    var top = null, topValue = 0;
-    Object.keys(scores).forEach(function (k) {
-      if (scores[k] > topValue) { topValue = scores[k]; top = k; }
-    });
-
-    LAYERS.forEach(function (entry) {
-      var key = entry[0], label = entry[1];
-      var value = Math.max(0, Math.min(1, scores[key] || 0));
-      var li = document.createElement("li");
-      if (key === top && topValue > 0.05) li.className = "lead";
-
-      var name = document.createElement("span");
-      name.className = "name";
-      name.textContent = label;
-
-      var bar = document.createElement("span");
-      bar.className = "bar";
-      var fill = document.createElement("i");
-      fill.style.width = (value * 100) + "%";
-      if (key === top && topValue > 0.05) fill.className = "hot";
-      bar.appendChild(fill);
-
-      var num = document.createElement("span");
-      num.className = "num";
-      num.textContent = value > 0.005 ? value.toFixed(2) : "–";
-
-      li.appendChild(name);
-      li.appendChild(bar);
-      li.appendChild(num);
-      list.appendChild(li);
-    });
-  }
-
-  function renderSignals(f) {
-    var list = el("signalList");
-    var values = f.v || {};
-    list.innerHTML = "";
-    SIGNALS.forEach(function (entry) {
-      var key = entry[0], label = entry[1], unit = entry[2], threshold = entry[3];
-      if (values[key] === undefined) return;
-      var value = values[key];
-      var hot = key === "wifi_rssi_dbm" ? value <= threshold : value >= threshold;
-      var li = document.createElement("li");
-      var l = document.createElement("span");
-      l.className = "label";
-      l.textContent = label;
-      var v = document.createElement("span");
-      v.className = "value" + (hot ? " hot" : "");
-      v.textContent = value + unit;
-      li.appendChild(l);
-      li.appendChild(v);
-      list.appendChild(li);
-    });
-  }
-
-  function updateLeadBadge(data) {
-    var badge = el("leadBadge");
+  function renderLeadFlag(data) {
+    var flag = el("leadFlag");
     if (data.leadSeconds && state.frame >= (data.alertIndex || 0)) {
-      badge.hidden = false;
-      badge.textContent = "warned " + minutes(data.leadSeconds) + " before it broke";
-    } else if (data.benign) {
-      badge.hidden = false;
-      badge.textContent = "no alert raised";
+      flag.hidden = false;
+      flag.textContent = "warned " +
+        (data.leadSeconds / 60).toFixed(1).replace(/\.0$/, "") + " min early";
     } else {
-      badge.hidden = true;
+      flag.hidden = true;
     }
-  }
-
-  /* ---------------------------------------------------------------- chart */
-
-  var NS = "http://www.w3.org/2000/svg";
-  var W = 1000, H = 240, PAD = 10;
-
-  function node(name, attrs) {
-    var n = document.createElementNS(NS, name);
-    Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
-    return n;
-  }
-
-  function drawChart() {
-    var svg = el("chart");
-    var data = state.scenario;
-    svg.innerHTML = "";
-    if (!data || !data.frames.length) return;
-
-    var frames = data.frames;
-    var n = frames.length;
-    var x = function (i) { return PAD + (i / (n - 1)) * (W - PAD * 2); };
-    var y = function (h) { return PAD + (1 - (h || 0) / 100) * (H - PAD * 2); };
-
-    // The period when things were actually bad.
-    if (data.impactIndex !== null && data.impactIndex !== undefined) {
-      svg.appendChild(node("rect", {
-        x: x(data.impactIndex), y: PAD,
-        width: Math.max(2, W - PAD - x(data.impactIndex)), height: H - PAD * 2,
-        fill: "var(--crit)", opacity: "0.10"
-      }));
-      svg.appendChild(node("line", {
-        x1: x(data.impactIndex), x2: x(data.impactIndex), y1: PAD, y2: H - PAD,
-        stroke: "var(--crit)", "stroke-width": "1.5", "stroke-dasharray": "4 3", opacity: "0.8"
-      }));
-      svg.appendChild(label(x(data.impactIndex) + 7, PAD + 14, "it broke", "var(--crit)"));
-    }
-
-    // Where the agent first warned.
-    if (data.alertIndex !== null && data.alertIndex !== undefined) {
-      svg.appendChild(node("line", {
-        x1: x(data.alertIndex), x2: x(data.alertIndex), y1: PAD, y2: H - PAD,
-        stroke: "var(--watch)", "stroke-width": "2"
-      }));
-      svg.appendChild(label(x(data.alertIndex) - 6, PAD + 14, "warned", "var(--watch)", "end"));
-
-      // The gap between the two, drawn as a measured span.
-      if (data.impactIndex !== null && data.impactIndex !== undefined) {
-        var mid = (x(data.alertIndex) + x(data.impactIndex)) / 2;
-        var yArrow = H - PAD - 16;
-        svg.appendChild(node("line", {
-          x1: x(data.alertIndex), x2: x(data.impactIndex), y1: yArrow, y2: yArrow,
-          stroke: "var(--ok)", "stroke-width": "1.5"
-        }));
-        [data.alertIndex, data.impactIndex].forEach(function (i) {
-          svg.appendChild(node("line", {
-            x1: x(i), x2: x(i), y1: yArrow - 4, y2: yArrow + 4,
-            stroke: "var(--ok)", "stroke-width": "1.5"
-          }));
-        });
-        svg.appendChild(label(mid, yArrow - 7, minutes(data.leadSeconds), "var(--ok)", "middle"));
-      }
-    }
-
-    // Warm-up is drawn as explicitly not counted.
-    if (data.warmFrom) {
-      svg.appendChild(node("rect", {
-        x: PAD, y: PAD, width: Math.max(0, x(data.warmFrom) - PAD), height: H - PAD * 2,
-        fill: "var(--text-3)", opacity: "0.08"
-      }));
-      svg.appendChild(label(PAD + 6, H - PAD - 6, "warming up", "var(--text-3)"));
-    }
-
-    [25, 50, 75].forEach(function (level) {
-      svg.appendChild(node("line", {
-        x1: PAD, x2: W - PAD, y1: y(level), y2: y(level),
-        stroke: "var(--text-3)", opacity: "0.15", "stroke-width": "1"
-      }));
-    });
-
-    var d = frames.map(function (f, i) {
-      return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(f.h).toFixed(1);
-    }).join(" ");
-
-    svg.appendChild(node("path", {
-      d: d + " L" + x(n - 1) + " " + (H - PAD) + " L" + x(0) + " " + (H - PAD) + " Z",
-      fill: "var(--accent)", opacity: "0.10"
-    }));
-    svg.appendChild(node("path", {
-      d: d, fill: "none", stroke: "var(--accent)", "stroke-width": "2",
-      "vector-effect": "non-scaling-stroke", "stroke-linejoin": "round"
-    }));
-
-    var head = node("line", {
-      x1: 0, x2: 0, y1: PAD, y2: H - PAD,
-      stroke: "var(--text)", "stroke-width": "1.5", opacity: "0.75", id: "playhead"
-    });
-    svg.appendChild(head);
-    var dot = node("circle", { cx: 0, cy: 0, r: 4, fill: "var(--accent)",
-      stroke: "var(--surface)", "stroke-width": "2", id: "playdot" });
-    svg.appendChild(dot);
-  }
-
-  function label(x, y, value, colour, anchor) {
-    var t = node("text", {
-      x: x, y: y, fill: colour, "font-size": "12", "font-weight": "600",
-      "text-anchor": anchor || "start",
-      "font-family": "system-ui, sans-serif"
-    });
-    t.textContent = value;
-    return t;
-  }
-
-  function movePlayhead() {
-    var data = state.scenario;
-    if (!data) return;
-    var n = data.frames.length;
-    var head = document.getElementById("playhead");
-    var dot = document.getElementById("playdot");
-    if (!head || !dot) return;
-    var px = PAD + (state.frame / (n - 1)) * (W - PAD * 2);
-    var py = PAD + (1 - (data.frames[state.frame].h || 0) / 100) * (H - PAD * 2);
-    head.setAttribute("x1", px); head.setAttribute("x2", px);
-    dot.setAttribute("cx", px); dot.setAttribute("cy", py);
   }
 
   /* -------------------------------------------------------------- playback */
@@ -442,8 +413,7 @@
       state.frame = Math.max(0, (state.scenario.warmFrom || 0) - 4);
     }
     state.playing = true;
-    el("playLabel").textContent = "Pause";
-    el("playBtn").querySelector(".icon-play").classList.add("pause");
+    text("playLabel", "⏸ pause");
     el("playBtn").setAttribute("aria-label", "Pause");
     clearInterval(state.timer);
     // Each frame is 15 seconds of recorded time.
@@ -453,11 +423,23 @@
   function pause() {
     state.playing = false;
     clearInterval(state.timer);
-    var btn = el("playBtn");
-    if (!btn) return;
-    el("playLabel").textContent = "Play";
-    btn.querySelector(".icon-play").classList.remove("pause");
-    btn.setAttribute("aria-label", "Play");
+    if (!el("playBtn")) return;
+    text("playLabel", "▶ play");
+    el("playBtn").setAttribute("aria-label", "Play");
+  }
+
+  function measure() {
+    // How many monospace characters fit across the panel, so the chart is
+    // drawn to the real terminal width rather than a guess.
+    var probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font:13px var(--mono)";
+    probe.textContent = "0".repeat(100);
+    document.body.appendChild(probe);
+    var charWidth = probe.getBoundingClientRect().width / 100;
+    document.body.removeChild(probe);
+    var panel = document.querySelector(".chart-wrap");
+    var available = panel ? panel.getBoundingClientRect().width : 800;
+    state.width = Math.max(40, Math.floor(available / Math.max(6, charWidth)) - 6);
   }
 
   function wire() {
@@ -476,11 +458,10 @@
 
     document.querySelectorAll("[data-copy]").forEach(function (button) {
       button.addEventListener("click", function () {
-        var target = document.querySelector(button.dataset.copy);
-        if (!target || !navigator.clipboard) return;
-        navigator.clipboard.writeText(target.textContent.trim()).then(function () {
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(button.dataset.copy).then(function () {
           var original = button.textContent;
-          button.textContent = "Copied";
+          button.textContent = "copied";
           setTimeout(function () { button.textContent = original; }, 1400);
         });
       });
@@ -488,17 +469,26 @@
 
     document.addEventListener("keydown", function (e) {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      if (!state.scenario) return;
       if (e.code === "Space") { e.preventDefault(); state.playing ? pause() : play(); }
-      if (e.code === "ArrowRight") { pause(); state.frame = Math.min(
-        state.scenario.frames.length - 1, state.frame + 1); render(); }
+      if (e.code === "ArrowRight") {
+        pause();
+        state.frame = Math.min(state.scenario.frames.length - 1, state.frame + 1);
+        render();
+      }
       if (e.code === "ArrowLeft") { pause(); state.frame = Math.max(0, state.frame - 1); render(); }
     });
 
-    window.addEventListener("resize", function () { drawChart(); render(); });
+    var resizeTimer;
+    window.addEventListener("resize", function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { measure(); render(); }, 120);
+    });
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     wire();
+    measure();
     loadIndex();
   });
 })();
